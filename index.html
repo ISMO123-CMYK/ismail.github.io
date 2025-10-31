@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Government Face Recognition System</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body,#root{height:100%}
+  body{font-family:Segoe UI, Tahoma, Geneva, Verdana, sans-serif;background:#000;color:#fff;overflow:hidden}
+  #root{width:100vw;height:100vh;position:relative}
+
+  /* Video + Canvas */
+  #video-container{position:absolute;inset:0;background:#111;z-index:1}
+  video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+  canvas#mainCanvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;transform:scaleX(-1);z-index:2}
+
+  /* Person Cards */
+  .person-card{position:absolute;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:12px;padding:12px;min-width:200px;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 10px 35px rgba(0,0,0,0.4);transform:translate(-50%,-100%);transition:all .2s ease;z-index:6;cursor:pointer}
+  .person-card:hover{transform:translate(-50%,-100%) scale(1.05)}
+  .person-card.mock-data{background:linear-gradient(135deg,#f39c12,#e67e22);border-color:rgba(255,193,7,0.3)}
+  .person-card.good-match{background:linear-gradient(135deg,#27ae60,#2ecc71);border-color:rgba(76,175,80,0.3)}
+  .person-card.weak-match{background:linear-gradient(135deg,#e74c3c,#c0392b);border-color:rgba(244,67,54,0.3)}
+
+  .person-header{display:flex;gap:10px;align-items:center;margin-bottom:8px}
+  .avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;background:linear-gradient(45deg,#ff6b6b,#4ecdc4)}
+  .person-name{font-weight:700;font-size:15px}
+  .person-id{font-size:11px;color:#e8e8e8;font-family:monospace}
+  .confidence-badge{position:absolute;top:-8px;right:-8px;background:rgba(0,0,0,0.8);color:#fff;padding:4px 8px;border-radius:12px;font-size:10px;font-weight:600}
+  .person-details{font-size:12px;color:#f0f0f0;line-height:1.3}
+  .detail-row{display:flex;justify-content:space-between;margin:2px 0}
+  .detail-label{color:#ddd}
+  .mock-badge{background:linear-gradient(45deg,#f39c12,#e67e22);color:#fff;padding:2px 6px;border-radius:8px;font-size:9px;margin-top:4px;display:inline-block}
+
+  /* UI controls */
+  .status{position:absolute;top:16px;left:16px;background:rgba(0,0,0,0.65);padding:10px 16px;border-radius:20px;z-index:9;font-size:14px}
+  .status-indicator{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px}
+  .status-indicator.active{background:#4caf50}
+  .status-indicator.inactive{background:#f44336}
+
+  .controls{position:absolute;bottom:16px;left:16px;display:flex;gap:12px;z-index:9}
+  .btn{padding:10px 16px;border-radius:25px;border:none;cursor:pointer;background:linear-gradient(45deg,#667eea,#764ba2);color:#fff;font-weight:600;transition:all .2s ease;font-size:14px}
+  .btn:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(102,126,234,0.4)}
+  .btn.secondary{background:linear-gradient(45deg,#555,#777)}
+  .btn.primary{background:linear-gradient(45deg,#4caf50,#45a049)}
+  .btn.danger{background:linear-gradient(45deg,#f44336,#d32f2f)}
+  .btn:disabled{background:#666;cursor:not-allowed;transform:none;box-shadow:none}
+  
+  .search-controls{position:absolute;bottom:16px;right:16px;display:flex;gap:8px;z-index:9}
+  .capture-btn{width:64px;height:64px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(45deg,#ff6b6b,#4ecdc4);color:#fff;font-size:24px;transition:all .2s ease;display:flex;align-items:center;justify-content:center}
+  .capture-btn:hover{transform:scale(1.1);box-shadow:0 8px 25px rgba(255,107,107,0.4)}
+  .capture-btn:disabled{background:#666;cursor:not-allowed;transform:none}
+
+  .add-person-btn{padding:8px 12px;border-radius:20px;border:none;cursor:pointer;background:linear-gradient(45deg,#9c27b0,#673ab7);color:#fff;font-weight:600;font-size:12px;margin-top:8px}
+
+  /* Loading overlay */
+  .loading-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:50}
+  .loading-spinner{width:40px;height:40px;border:4px solid rgba(255,255,255,0.2);border-top:4px solid #fff;border-radius:50%;animation:spin 1s linear infinite}
+  @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+
+  /* Modal */
+  .modal{display:none;position:fixed;inset:0;align-items:center;justify-content:center;background:rgba(0,0,0,0.8);z-index:999}
+  .modal.active{display:flex}
+  .modal-content{background:#1a1a1a;color:#fff;border-radius:12px;padding:20px;max-width:400px;width:90%;max-height:90%;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.8);border:1px solid #333}
+  .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:10px;border-bottom:1px solid #333}
+  .modal-header h3{margin:0;font-size:18px;color:#fff}
+  .close{cursor:pointer;font-weight:700;padding:8px;border-radius:8px;background:#333;color:#fff;border:none;transition:background .2s}
+  .close:hover{background:#555}
+
+  .form-group{margin-bottom:16px}
+  .form-label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:#ddd}
+  .form-input{width:100%;padding:10px;border:1px solid #444;border-radius:8px;background:#2a2a2a;color:#fff;font-size:14px}
+  .form-input:focus{border-color:#667eea;outline:none;box-shadow:0 0 0 2px rgba(102,126,234,0.2)}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+  .error-message{background:rgba(244,67,54,0.2);border:1px solid #f44336;color:#ffcdd2;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px}
+  .success-message{background:rgba(76,175,80,0.2);border:1px solid #4caf50;color:#c8e6c9;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px}
+
+  @media (max-width:480px){
+    .person-card{min-width:160px;padding:10px;font-size:11px}
+    .controls{bottom:12px;left:12px;gap:8px}
+    .search-controls{bottom:12px;right:12px}
+    .capture-btn{width:56px;height:56px;font-size:20px}
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+const { createRoot } = ReactDOM;
+
+const API_BASE = 'http://localhost:3000/api';
+
+function App() {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const modalRef = useRef(null);
+  
+  const [streaming, setStreaming] = useState(false);
+  const [faces, setFaces] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [capturedImage, setCapturedImage] = useState(null);
+  const [stats, setStats] = useState(null);
+  
+  // Add person form
+  const [addPersonData, setAddPersonData] = useState({
+    name: '', id: '', age: '', state: '', department: '', occupation: ''
+  });
+
+  // Start camera
+  const startCamera = async () => {
+    try {
+      setError('');
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { width: 1280, height: 720 }
+      });
+      streamRef.current = stream;
+      const video = videoRef.current;
+      video.srcObject = stream;
+      
+      await new Promise(resolve => {
+        if (video.readyState >= 1 && video.videoWidth && video.videoHeight) return resolve();
+        const cb = () => { video.removeEventListener('loadedmetadata', cb); resolve(); };
+        video.addEventListener('loadedmetadata', cb);
+      });
+      
+      await video.play();
+      setStreaming(true);
+    } catch (err) {
+      setError('Camera access denied. Please allow camera access.');
+      console.error('Camera error:', err);
+    }
+  };
+
+  // Stop camera
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setStreaming(false);
+    setFaces([]);
+  };
+
+  // Capture and search face
+  const captureAndSearch = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    
+    try {
+      const canvas = canvasRef.current;
+      const video = videoRef.current;
+      
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      const ctx = canvas.getContext('2d');
+      // Flip the image back to normal orientation for the API
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, -canvas.width, 0);
+      
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          setError('Failed to capture image');
+          setLoading(false);
+          return;
+        }
+
+        setCapturedImage(blob);
+        
+        const formData = new FormData();
+        formData.append('image', blob, 'capture.jpg');
+        
+        try {
+          const response = await fetch(`${API_BASE}/faces/search`, {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (!response.ok) {
+            throw new Error(`Server error: ${response.status}`);
+          }
+          
+          const result = await response.json();
+          
+          if (result.success && result.match) {
+            // Create a face object for display
+            const faceData = {
+              id: Date.now(), // unique display id
+              x: canvas.width / 2,
+              y: canvas.height / 2,
+              width: 200,
+              height: 250,
+              person: result.match,
+              confidence: result.match.confidence,
+              isGoodMatch: result.match.isGoodMatch,
+              isMockData: result.match.isMockData
+            };
+            
+            setFaces([faceData]);
+            
+            if (result.match.isMockData) {
+              setSuccess('Face detected but not found in database. Showing mock data.');
+            } else if (result.match.isGoodMatch) {
+              setSuccess('Person identified successfully!');
+            } else {
+              setSuccess('Weak match found. Confidence is low.');
+            }
+          } else {
+            setError('No face detected in image');
+          }
+          
+        } catch (err) {
+          setError(`Search failed: ${err.message}`);
+        } finally {
+          setLoading(false);
+        }
+      }, 'image/jpeg', 0.8);
+      
+    } catch (err) {
+      setError(`Capture failed: ${err.message}`);
+      setLoading(false);
+    }
+  };
+
+  // Add person to database
+  const addPersonToDatabase = async () => {
+    if (!capturedImage) {
+      setError('No captured image available');
+      return;
+    }
+
+    if (!addPersonData.name || !addPersonData.id) {
+      setError('Name and ID are required');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('image', capturedImage, 'person.jpg');
+      formData.append('name', addPersonData.name);
+      formData.append('id', addPersonData.id);
+      
+      const metadata = {
+        age: parseInt(addPersonData.age) || 0,
+        state: addPersonData.state,
+        department: addPersonData.department,
+        occupation: addPersonData.occupation
+      };
+      
+      formData.append('metadata', JSON.stringify(metadata));
+
+      const response = await fetch(`${API_BASE}/faces/add`, {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await response.json();
+      
+      if (result.success) {
+        setShowAddModal(false);
+        setAddPersonData({ name: '', id: '', age: '', state: '', department: '', occupation: '' });
+        setSuccess('Person added to database successfully!');
+        loadStats();
+      } else {
+        setError(result.error || 'Failed to add person');
+      }
+      
+    } catch (err) {
+      setError(`Failed to add person: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load stats
+  const loadStats = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/stats`);
+      if (response.ok) {
+        const result = await response.json();
+        setStats(result.stats);
+      }
+    } catch (err) {
+      console.error('Failed to load stats:', err);
+    }
+  };
+
+  // Clear messages after 5 seconds
+  useEffect(() => {
+    if (error || success) {
+      const timer = setTimeout(() => {
+        setError('');
+        setSuccess('');
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error, success]);
+
+  useEffect(() => {
+    loadStats();
+    return () => stopCamera();
+  }, []);
+
+  return (
+    <div style={{width:'100vw',height:'100vh',position:'relative'}}>
+      {/* Video container */}
+      <div id="video-container">
+        <video 
+          ref={videoRef} 
+          autoPlay 
+          playsInline 
+          muted 
+          style={{width:'100%',height:'100%',objectFit:'cover',transform:'scaleX(-1)'}}
+        />
+        <canvas ref={canvasRef} style={{display:'none'}} />
+      </div>
+
+      {/* Loading overlay */}
+      {loading && (
+        <div className="loading-overlay">
+          <div className="loading-spinner"></div>
+        </div>
+      )}
+
+      {/* Status bar */}
+      <div className="status">
+        <span className={`status-indicator ${streaming ? 'active' : 'inactive'}`}></span>
+        {streaming ? 'Camera Active' : 'Camera Stopped'} • 
+        Faces: {faces.length} • 
+        DB: {stats?.totalFaces || 0} people
+      </div>
+
+      {/* Main controls */}
+      <div className="controls">
+        {!streaming ? (
+          <button className="btn primary" onClick={startCamera}>
+            📹 Start Camera
+          </button>
+        ) : (
+          <button className="btn danger" onClick={stopCamera}>
+            ⏹️ Stop Camera
+          </button>
+        )}
+      </div>
+
+      {/* Search controls */}
+      {streaming && (
+        <div className="search-controls">
+          <button 
+            className="capture-btn"
+            onClick={captureAndSearch}
+            disabled={loading}
+          >
+            {loading ? '⏳' : '📸'}
+          </button>
+        </div>
+      )}
+
+      {/* Error/Success messages */}
+      {error && (
+        <div style={{position:'absolute',top:'80px',left:'16px',right:'16px',zIndex:10}}>
+          <div className="error-message">❌ {error}</div>
+        </div>
+      )}
+      
+      {success && (
+        <div style={{position:'absolute',top:'80px',left:'16px',right:'16px',zIndex:10}}>
+          <div className="success-message">✅ {success}</div>
+        </div>
+      )}
+
+      {/* Face cards */}
+      {faces.map(face => {
+        const person = face.person;
+        const cardClass = person.isMockData ? 'mock-data' : 
+                         person.isGoodMatch ? 'good-match' : 'weak-match';
+        
+        return (
+          <div 
+            key={face.id} 
+            className={`person-card ${cardClass}`}
+            style={{ 
+              left: face.x, 
+              top: Math.max(100, face.y - 50),
+              transform: 'translate(-50%, -100%)'
+            }}
+          >
+            {!person.isMockData && (
+              <div className="confidence-badge">
+                {Math.round(person.confidence)}%
+              </div>
+            )}
+            
+            <div className="person-header">
+              <div className="avatar">
+                {person.name.split(' ').map(n => n[0]).join('').substr(0,2)}
+              </div>
+              <div>
+                <div className="person-name">{person.name}</div>
+                <div className="person-id">{person.id}</div>
+              </div>
+            </div>
+
+            <div className="person-details">
+              {person.metadata?.age && (
+                <div className="detail-row">
+                  <span className="detail-label">Age:</span>
+                  <span>{person.metadata.age}</span>
+                </div>
+              )}
+              {person.metadata?.state && (
+                <div className="detail-row">
+                  <span className="detail-label">State:</span>
+                  <span>{person.metadata.state}</span>
+                </div>
+              )}
+              {person.metadata?.department && (
+                <div className="detail-row">
+                  <span className="detail-label">Department:</span>
+                  <span>{person.metadata.department}</span>
+                </div>
+              )}
+              {person.metadata?.occupation && (
+                <div className="detail-row">
+                  <span className="detail-label">Occupation:</span>
+                  <span>{person.metadata.occupation}</span>
+                </div>
+              )}
+            </div>
+
+            {person.isMockData && (
+              <>
+                <div className="mock-badge">MOCK DATA</div>
+                <button 
+                  className="add-person-btn"
+                  onClick={() => setShowAddModal(true)}
+                >
+                  ➕ Add to Database
+                </button>
+              </>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Add Person Modal */}
+      {showAddModal && (
+        <div className="modal active">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>Add Person to Database</h3>
+              <button className="close" onClick={() => setShowAddModal(false)}>✕</button>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Full Name *</label>
+              <input
+                type="text"
+                className="form-input"
+                value={addPersonData.name}
+                onChange={(e) => setAddPersonData({...addPersonData, name: e.target.value})}
+                placeholder="Enter full name"
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">ID Number *</label>
+              <input
+                type="text"
+                className="form-input"
+                value={addPersonData.id}
+                onChange={(e) => setAddPersonData({...addPersonData, id: e.target.value})}
+                placeholder="NIN or ID number"
+              />
+            </div>
+
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label">Age</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={addPersonData.age}
+                  onChange={(e) => setAddPersonData({...addPersonData, age: e.target.value})}
+                  placeholder="Age"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">State</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={addPersonData.state}
+                  onChange={(e) => setAddPersonData({...addPersonData, state: e.target.value})}
+                  placeholder="State"
+                />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Department</label>
+              <input
+                type="text"
+                className="form-input"
+                value={addPersonData.department}
+                onChange={(e) => setAddPersonData({...addPersonData, department: e.target.value})}
+                placeholder="Police, DSS, Immigration, etc."
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Occupation</label>
+              <input
+                type="text"
+                className="form-input"
+                value={addPersonData.occupation}
+                onChange={(e) => setAddPersonData({...addPersonData, occupation: e.target.value})}
+                placeholder="Job title or occupation"
+              />
+            </div>
+
+            {error && <div className="error-message">{error}</div>}
+
+            <div style={{display:'flex',gap:'12px',marginTop:'20px'}}>
+              <button 
+                className="btn secondary" 
+                onClick={() => setShowAddModal(false)}
+                style={{flex:1}}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn primary"
+                onClick={addPersonToDatabase}
+                disabled={loading || !addPersonData.name || !addPersonData.id}
+                style={{flex:1}}
+              >
+                {loading ? 'Adding...' : 'Add Person'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const root = createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
