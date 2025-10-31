@@ -1,1090 +1,457 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Galactic Navigator — Orbiting AutoExplore + Sun Glow Fix</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script type="importmap">
-  { "imports": { "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js" } }
-  </script>
-  <style>
-    body { margin:0; background:#000; font-family:Inter, sans-serif; overflow:hidden; }
-    #canvas-container { position:fixed; inset:0; z-index:0; }
-    .ui-panel { position:absolute; background: rgba(17,24,39,0.95);
-      border:2px solid #6366f1; color:#d1d5db; padding:1rem; border-radius:10px;
-      z-index:100; max-width:420px; box-shadow: 0 10px 20px rgba(0,0,0,0.7); }
-    #crosshair { pointer-events:none; position:fixed; z-index:150; left:50%; top:50%;
-      transform:translate(-50%,-50%); width:48px; height:48px; display:flex;
-      align-items:center; justify-content:center; }
-    body.pointer-locked { cursor:none; }
-    .small { font-size:0.85rem; color:#c7d2fe; }
-    .btn { cursor:pointer; user-select:none; margin-right:6px; }
-    .controls-row { display:flex; gap:8px; align-items:center; margin-top:8px; }
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Government Pose Tracking System</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body,#root{height:100%}
+  body{font-family:Segoe UI, Tahoma, Geneva, Verdana, sans-serif;background:#000;color:#fff;overflow:hidden}
+  #root{width:100vw;height:100vh;position:relative}
 
-    /* Loading overlay */
-    #loading-overlay {
-      position:fixed; inset:0; z-index:9999;
-      display:flex; align-items:center; justify-content:center;
-      background:linear-gradient(180deg, rgba(2,6,23,0.95), rgba(2,6,23,0.88));
-      color:#e6eef8; font-family:Inter, sans-serif;
-      -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
-      flex-direction:column; padding:20px;
-    }
-    #loading-box {
-      width:520px; max-width:92%;
-      background: rgba(10,12,20,0.5);
-      border:1px solid rgba(99,102,241,0.12);
-      padding:18px; border-radius:12px; text-align:center;
-      box-shadow: 0 12px 30px rgba(2,6,23,0.6);
-    }
-    .loader-spinner {
-      width:56px; height:56px; margin:0 auto 12px; border-radius:50%;
-      border:6px solid rgba(255,255,255,0.06); border-top-color:#60a5fa;
-      animation:spin 1.05s linear infinite;
-    }
-    @keyframes spin { to { transform:rotate(360deg); } }
-    #progress-bar {
-      width:100%; height:10px; background:rgba(255,255,255,0.06); border-radius:6px; overflow:hidden; margin-top:12px;
-    }
-    #progress-fill { height:100%; width:0%; background:linear-gradient(90deg,#60a5fa,#34d399); }
-    #loading-meta { margin-top:8px; color:#c7d2fe; font-size:0.92rem; }
-    #retry-btn { margin-top:12px; display:none; }
-  </style>
+  /* Video Feed - Bottom Left */
+  #video-container{position:absolute;bottom:16px;left:16px;width:320px;height:240px;background:#111;border-radius:8px;z-index:3;overflow:hidden}
+  video{width:100%;height:100%;object-fit:cover}
+
+  /* Main Model Area */
+  .model-container{position:absolute;top:0;left:0;width:100%;height:100%;display:flex}
+  .model-canvas{flex:1;height:100%;position:relative}
+
+  /* Skeleton Canvas */
+  .skeleton-canvas{background:#111}
+
+  /* Robot Canvas */
+  .robot-canvas{background:linear-gradient(135deg, #0c0c0c, #1a1a2e)}
+
+  /* UI Controls */
+  .status{position:absolute;top:16px;left:16px;background:rgba(0,0,0,0.65);padding:10px 16px;border-radius:20px;z-index:10;font-size:14px}
+  .status-indicator{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;background:#4caf50}
+
+  .controls{position:absolute;bottom:16px;left:16px;display:flex;gap:12px;z-index:10}
+  .btn{padding:10px 16px;border-radius:25px;border:none;cursor:pointer;background:linear-gradient(45deg,#667eea,#764ba2);color:#fff;font-weight:600;transition:all .2s ease;font-size:14px;box-shadow:0 0 20px rgba(102,126,234,0.3)}
+  .btn:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(102,126,234,0.4)}
+  .btn.primary{background:linear-gradient(45deg,#4caf50,#45a049);box-shadow:0 0 20px rgba(76,175,80,0.3)}
+  .btn.danger{background:linear-gradient(45deg,#f44336,#d32f2f);box-shadow:0 0 20px rgba(244,67,54,0.3)}
+  .btn:disabled{background:#666;cursor:not-allowed;transform:none;box-shadow:none}
+
+  /* Guidelines Panel */
+  .guidelines-panel{position:absolute;top:50%;right:16px;transform:translateY(-50%);background:rgba(0,0,0,0.8);backdrop-filter:blur(10px);padding:20px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);max-width:300px;max-height:80vh;overflow-y:auto;z-index:9;font-size:12px;line-height:1.4}
+  .guidelines-panel h3{margin:0 0 12px 0;font-size:14px;color:#667eea;text-align:center}
+  .guidelines-panel ul{margin:0;padding-left:16px}
+  .guidelines-panel li{margin-bottom:6px;color:#e8e8e8}
+  .guidelines-panel .toggle-btn{position:absolute;top:10px;right:10px;background:none;border:none;color:#fff;font-size:18px;cursor:pointer}
+
+  /* Neon animations */
+  @keyframes neon-pulse {
+    0%, 100% { filter: drop-shadow(0 0 5px currentColor); }
+    50% { filter: drop-shadow(0 0 20px currentColor); }
+  }
+</style>
 </head>
 <body>
-  <div id="canvas-container"></div>
+<div id="root"></div>
 
-  <!-- Loading overlay -->
-  <div id="loading-overlay" aria-live="polite">
-    <div id="loading-box">
-      <div class="loader-spinner" role="img" aria-label="Loading"></div>
-      <div style="font-size:1.1rem;font-weight:700;color:#e6eef8">Loading textures & assets</div>
-      <div id="loading-status" style="margin-top:8px;color:#c7d2fe">Preparing...</div>
-      <div id="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-        <div id="progress-fill"></div>
-      </div>
-      <div id="loading-meta">0 / 0</div>
-      <button id="retry-btn" class="btn px-3 py-1 bg-indigo-600 rounded text-white text-sm">Retry Failed</button>
-    </div>
-  </div>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/pose.js" crossorigin="anonymous"></script>
 
-  <div id="instruction-panel" class="ui-panel top-4 left-4">
-    <h2 class="text-xl font-bold text-indigo-400 mb-2">Controls</h2>
-    <p class="text-sm text-yellow-300"><span class="font-mono text-yellow-400">Click</span> pointer lock. Toggle Cursor Mode to show mouse.</p>
-    <div class="controls-row">
-      <button id="toggleMode" class="btn px-2 py-1 bg-indigo-600 rounded text-white text-xs">Cursor Mode: OFF</button>
-      <button id="toggleAuto" class="btn px-2 py-1 bg-slate-700 rounded text-white text-xs">Auto Explore: OFF</button>
-      <button id="toggleLabels" class="btn px-2 py-1 bg-slate-700 rounded text-white text-xs">Labels: ON</button>
-    </div>
-  </div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+const { createRoot } = ReactDOM;
 
-  <div id="detail-panel" class="ui-panel bottom-4 right-4 hidden">
-    <h2 id="planet-name" class="text-2xl font-extrabold text-white mb-1"></h2>
-    <img id="planet-img" alt="planet" style="width:220px;height:auto;border-radius:8px;margin-bottom:8px"/>
-    <div class="small" style="line-height:1.35">
-      <div>Type: <span id="planet-type"></span></div>
-      <div>Radius (real): <span id="planet-radius-real"></span> km</div>
-      <div>Radius (visual): <span id="planet-radius-vis"></span> units</div>
-    </div>
-    <div class="controls-row mt-3">
-      <button id="focusBtn" class="btn px-2 py-1 bg-green-600 rounded text-white text-xs">Focus</button>
-      <button id="close-detail" class="btn px-2 py-1 bg-red-600 rounded text-white text-xs">Close</button>
-    </div>
-  </div>
-
-  <div id="crosshair">
-    <svg viewBox="0 0 24 24" fill="none" stroke="#00ff99" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="12" cy="12" r="6" stroke-opacity="0.95"></circle>
-      <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke-opacity="0.85"/>
-    </svg>
-  </div>
-
-  <script type="module">
-    import * as THREE from 'three';
-
-    // scales & timing
-    const VISUAL_DISTANCE_SCALE = 100.0;
-    const VISUAL_RADIUS_SCALE = 0.0001;
-    const SECONDS_PER_DAY = 86400;
-    let timeScale = 50000;
-    let cursorMode = false;
-    let labelsEnabled = true;
-    let paused = false;
-
-    // Track whether assets finished loading
-    let assetsLoaded = false;
-
-// Keep your original txt structure intact (URLs for proxying)
-const txt = {
-  Sun:     'https://www.solarsystemscope.com/textures/download/2k_sun.jpg',
-  Mercury: 'https://www.solarsystemscope.com/textures/download/2k_mercury.jpg',
-  Venus:   'https://www.solarsystemscope.com/textures/download/2k_venus_atmosphere.jpg',
-  Earth:   'https://www.solarsystemscope.com/textures/download/2k_earth_daymap.jpg',
-  Mars:    'https://www.solarsystemscope.com/textures/download/2k_mars.jpg',
-  Jupiter: 'https://www.solarsystemscope.com/textures/download/2k_jupiter.jpg',
-  Saturn:  'https://www.solarsystemscope.com/textures/download/2k_saturn.jpg',
-  SaturnRings: 'https://www.solarsystemscope.com/textures/download/2k_saturn_ring_alpha.png',
-  Uranus:  'https://www.solarsystemscope.com/textures/download/2k_uranus.jpg',
-  Neptune: 'https://www.solarsystemscope.com/textures/download/2k_neptune.jpg',
-  Pluto:   'https://upload.wikimedia.org/wikipedia/commons/a/ad/Pluto_color_mapmosaic.jpg'
-};
-
-    // UI elements for loading
-    const overlayEl = document.getElementById('loading-overlay');
-    const statusEl = document.getElementById('loading-status');
-    const metaEl = document.getElementById('loading-meta');
-    const fillEl = document.getElementById('progress-fill');
-    const retryBtn = document.getElementById('retry-btn');
-
-    // track preload state
-    let totalToLoad = 0;
-    let loadedCount = 0;
-    let failedKeys = [];
-
-    function setProgress(n, txtMsg) {
-      var pct = Math.round((n / Math.max(1, totalToLoad)) * 100);
-      fillEl.style.width = pct + '%';
-      metaEl.textContent = n + ' / ' + totalToLoad;
-      statusEl.textContent = txtMsg || ('Loading assets — ' + pct + '%');
-      var bar = document.getElementById('progress-bar');
-      if (bar) bar.setAttribute('aria-valuenow', String(pct));
-    }
-    function showOverlay() { overlayEl.style.display = 'flex'; }
-    function hideOverlay() { overlayEl.style.display = 'none'; }
-
-    // Batch pre-load all textures via proxy (sequential for stability)
-    async function preloadAllTextures() {
-      totalToLoad = 0;
-      for (var k in txt) totalToLoad += 1;
-      loadedCount = 0;
-      failedKeys = [];
-      setProgress(0, 'Starting preload...');
-      showOverlay();
-
-      var keys = [];
-      for (var kk in txt) keys.push(kk);
-
-      for (var i = 0; i < keys.length; i++) {
-        var key = keys[i];
-        try {
-          statusEl.textContent = 'Proxying ' + key + ' (' + (i+1) + '/' + totalToLoad + ')';
-          var proxyRes = await fetch('/proxy?url=' + encodeURIComponent(txt[key]));
-          if (proxyRes && proxyRes.ok) {
-            try {
-              var j = await proxyRes.json();
-              if (j && j.path) {
-                txt[key] = j.path; // replace with proxied local path
-                loadedCount += 1;
-                setProgress(loadedCount, 'Proxied ' + key);
-              } else {
-                failedKeys.push(key);
-                setProgress(loadedCount, 'Proxy returned unexpected data for ' + key);
-              }
-            } catch (je) {
-              failedKeys.push(key);
-              setProgress(loadedCount, 'Proxy parse failed for ' + key);
-            }
-          } else {
-            failedKeys.push(key);
-            setProgress(loadedCount, 'Proxy failed for ' + key);
-          }
-        } catch (err) {
-          failedKeys.push(key);
-          setProgress(loadedCount, 'Network error for ' + key);
-        }
-        await new Promise(function(res) { setTimeout(res, 120); });
-      }
-
-      if (failedKeys.length > 0) {
-        statusEl.textContent = 'Proxy completed with ' + failedKeys.length + ' failures.';
-        retryBtn.style.display = 'inline-block';
-      } else {
-        statusEl.textContent = 'All textures proxied successfully.';
-        retryBtn.style.display = 'none';
-      }
-
-      await prewarmTextures();
-
-      assetsLoaded = true;
-      setProgress(totalToLoad, 'Assets ready.');
-      await new Promise(function(res) { setTimeout(res, 450); });
-      hideOverlay();
-    }
-
-    retryBtn.addEventListener('click', function() {
-      retryBtn.style.display = 'none';
-      (async function retryFailed() {
-        var retryList = failedKeys.slice(0);
-        failedKeys = [];
-        setProgress(0, 'Retrying failed items...');
-        showOverlay();
-        for (var i=0;i<retryList.length;i++) {
-          var key = retryList[i];
-          try {
-            statusEl.textContent = 'Retry proxy ' + key + ' (' + (i+1) + '/' + retryList.length + ')';
-            var proxyRes = await fetch('/proxy?url=' + encodeURIComponent(txt[key]));
-            if (proxyRes && proxyRes.ok) {
-              var j = await proxyRes.json();
-              if (j && j.path) {
-                txt[key] = j.path;
-              } else {
-                failedKeys.push(key);
-              }
-            } else {
-              failedKeys.push(key);
-            }
-          } catch (err) {
-            failedKeys.push(key);
-          }
-          await new Promise(function(res) { setTimeout(res, 120); });
-        }
-        await prewarmTextures();
-        if (failedKeys.length > 0) {
-          statusEl.textContent = 'Retry done. ' + failedKeys.length + ' still failed.';
-          retryBtn.style.display = 'inline-block';
-        } else {
-          statusEl.textContent = 'All textures proxied successfully.';
-          retryBtn.style.display = 'none';
-          assetsLoaded = true;
-          await new Promise(function(res) { setTimeout(res, 300); });
-          hideOverlay();
-        }
-      })();
-    });
-
-    async function prewarmTextures() {
-      var keys = [];
-      for (var k in txt) keys.push(k);
-      var N = keys.length;
-      var done = 0;
-      setProgress(0, 'Pre-warming textures...');
-      for (var i = 0; i < N; i++) {
-        var key = keys[i];
-        var url = txt[key];
-        try {
-          await new Promise(function(resolve, reject) {
-            var img = new Image();
-            try { img.crossOrigin = 'anonymous'; } catch (e) {}
-            img.onload = function() { resolve(true); };
-            img.onerror = function() { resolve(false); };
-            var t = setTimeout(function(){ resolve(false); }, 3500);
-            img.src = url;
-          });
-        } catch (e) {}
-        done += 1;
-        setProgress(done, 'Pre-warming ' + key + ' (' + done + '/' + N + ')');
-        await new Promise(function(res) { setTimeout(res, 90); });
-      }
-      setProgress(N, 'Pre-warm complete.');
-    }
-
-
-// planets: [name, realRadiusKm, distAU, periodDays, type, textureKey]
-const planDefs = [
-  ['Sun',     696342,   0.0,    0,       'Star', 'Sun'],
-  ['Mercury', 2439.7,   0.387,  87.969,  'Rocky','Mercury'],
-  ['Venus',   6051.8,   0.723,  224.701, 'Rocky','Venus'],
-  ['Earth',   6371.0,   1.0,    365.256, 'Rocky','Earth'],
-  ['Mars',    3389.5,   1.524,  686.98,  'Rocky','Mars'],
-  ['Jupiter', 69911,    5.204,  4332.59, 'Gas Giant','Jupiter'],
-  ['Saturn',  58232,    9.582,  10759,   'Gas Giant','Saturn'],
-  ['Uranus',  25362,    19.201, 30687,   'Ice Giant','Uranus'],
-  ['Neptune', 24622,    30.047, 60190,   'Ice Giant','Neptune'],
-  ['Pluto',   1187,     39.48,  90560,   'Dwarf','Pluto']
+const POSE_CONNECTIONS = [
+  [0, 1], [0, 2], [1, 3], [2, 4], [0, 5], [0, 6], // head
+  [5, 7], [7, 9], [6, 8], [8, 10], [5, 6], [5, 11], [6, 12], // upper body
+  [11, 12], [11, 13], [13, 15], [12, 14], [14, 16], // arms
+  [11, 23], [12, 24], [23, 24], [23, 25], [24, 26], // torso hips
+  [25, 27], [26, 28] // legs
 ];
 
-const typeColor = { 
-  'Star': 0xffe07a, 
-  'Rocky': 0x7c9885, 
-  'Gas Giant': 0xd8c3a5, 
-  'Ice Giant': 0x9bd2e1,
-  'Dwarf': 0xc39953 
-};
-    // three essentials
-    let scene, camera, renderer, raycaster, textureLoader, clock;
-    const solarSystem = new THREE.Group();
-    const planetMeshes = [];
-    const orbitGroups = [];
-    const labelSprites = [];
-    const mouse = new THREE.Vector2(0,0);
-    let isPointerLocked = false;
-    let moveForward=false, moveBackward=false, moveLeft=false, moveRight=false;
-    let rotationX=0, rotationY=0;
-    const lookSensitivity = 0.002;
-    let playerSpeed = 20;
-    let lastHovered = null;
+function App() {
+  const videoRef = useRef(null);
+  const skeletonCanvasRef = useRef(null);
+  const robotCanvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const poseRef = useRef(null);
+  const cameraRef = useRef(null);
+  const prevLandmarksRef = useRef(null);
+  const animationIdRef = useRef(null);
+  
+  const [streaming, setStreaming] = useState(false);
+  const [error, setError] = useState('');
+  const [showGuidelines, setShowGuidelines] = useState(true);
+  const [poseDetected, setPoseDetected] = useState(false);
+  
+  // Smoothing factor for animation
+  const SMOOTHING = 0.3;
+  const CANVAS_WIDTH = window.innerWidth / 2;
+  const CANVAS_HEIGHT = window.innerHeight;
 
-    // Auto-explore state
-    let autoExplore = false;
-    let autoIndex = 0;
-    let autoMove = null;
-
-    // Focus/explore state
-    let isFocusing = false;
-    let focusTarget = null;
-    let focusDistance = 0;
-
-    // Epoch J2000 default (2000-01-01T12:00:00Z)
-    const J2000 = Date.parse('2000-01-01T12:00:00Z');
-
-    // caches
-    const loadedTextures = {};       // map ownerName -> THREE.Texture
-    const loadedImageURLs = {};      // map ownerName -> direct image URL (if available)
-
-    function init() {
-      if (!assetsLoaded) {
-        console.warn('Attempted to init before assets finished loading.');
-        return;
-      }
-
-      scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x000000);
-      scene.add(solarSystem);
-
-      textureLoader = new THREE.TextureLoader();
-      try { textureLoader.setCrossOrigin(''); } catch (e) { /* ignore */ }
-
-      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
-      camera.position.set(0, 50, 120);
-
-      renderer = new THREE.WebGLRenderer({ antialias:true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.setPixelRatio(window.devicePixelRatio);
-      document.getElementById('canvas-container').appendChild(renderer.domElement);
-
-      raycaster = new THREE.Raycaster();
-      clock = new THREE.Clock();
-
-      createStarField();
-      createSolarSystem();
-      createRocketVisual();
-      setupInput();
-      window.addEventListener('resize', onResize, false);
-
-      document.getElementById('toggleAuto').addEventListener('click', function(){
-        if (!assetsLoaded) return;
-        autoExplore = !autoExplore;
-        this.textContent = 'Auto Explore: ' + (autoExplore ? 'ON' : 'OFF');
-        if (autoExplore) startAutoExplore();
-        else stopAutoExplore();
-      });
-
-      document.getElementById('toggleMode').addEventListener('click', function(){
-        if (!assetsLoaded) return;
-        cursorMode = !cursorMode;
-        this.textContent = 'Cursor Mode: ' + (cursorMode ? 'ON' : 'OFF');
-        if (cursorMode && document.pointerLockElement === document.body) document.exitPointerLock();
-      });
-
-      document.getElementById('toggleLabels').addEventListener('click', function(){
-        labelsEnabled = !labelsEnabled;
-        this.textContent = 'Labels: ' + (labelsEnabled ? 'ON' : 'OFF');
-        labelSprites.forEach(function(s){ s.visible = labelsEnabled; });
-      });
-
-      document.getElementById('close-detail').addEventListener('click', function(){
-        document.getElementById('detail-panel').classList.add('hidden');
-      });
-
-      renderer.setAnimationLoop(loop);
+  const generateSmoothedLandmarks = useCallback((newLandmarks) => {
+    if (!prevLandmarksRef.current) {
+      prevLandmarksRef.current = newLandmarks;
+      return newLandmarks;
     }
-
-    function createStarField() {
-      const geom = new THREE.BufferGeometry();
-      const count = 8000;
-      const pos = new Float32Array(count * 3);
-      for (var i=0;i<count;i++){
-        pos[i*3+0] = (Math.random()-0.5)*8000;
-        pos[i*3+1] = (Math.random()-0.5)*8000;
-        pos[i*3+2] = (Math.random()-0.5)*8000;
-      }
-      geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-      const mat = new THREE.PointsMaterial({ color:0xffffff, size:2, sizeAttenuation:true });
-      const pts = new THREE.Points(geom, mat);
-      scene.add(pts);
-    }
-
-    function computeVisualRadius(realKm) { return Math.max(0.08, realKm * VISUAL_RADIUS_SCALE); }
-    function computeVisualDistance(au) { return au * VISUAL_DISTANCE_SCALE; }
-
-    // create a procedural glow sprite (radial gradient) for the Sun
-    function createSunGlowSprite(scale) {
-      var size = 512;
-      var canvas = document.createElement('canvas');
-      canvas.width = size;
-      canvas.height = size;
-      var ctx = canvas.getContext('2d');
-      var g = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
-      // toned down gradient stops — lighter, less flood
-      g.addColorStop(0.0, 'rgba(255,240,200,0.9)');
-      g.addColorStop(0.25, 'rgba(255,200,120,0.25)');
-      g.addColorStop(0.6, 'rgba(255,120,40,0.07)');
-      g.addColorStop(1.0, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0,0,size,size);
-      var tex = new THREE.CanvasTexture(canvas);
-      var mat = new THREE.SpriteMaterial({
-        map: tex,
-        blending: THREE.AdditiveBlending,
-        transparent:true,
-        depthWrite:false,
-        depthTest:true // let the sprite respect depth so it doesn't visually flood everything
-      });
-      // lower opacity and smaller scale so glow accents sun only
-      mat.opacity = 0.55;
-      var spr = new THREE.Sprite(mat);
-      // use slightly smaller multiplier so it doesn't dominate
-      spr.scale.set(scale * 0.75, scale * 0.75, 1);
-      spr.name = 'sunGlow';
-      spr.renderOrder = 10;
-      return spr;
-    }
-
-    // load texture using TextureLoader with graceful fallback to Image
-    function loadTextureDirect(url, onSuccess, onError) {
-      if (!url) { if (onError) onError(new Error('no-url')); return; }
-      try {
-        textureLoader.load(
-          url,
-          function(tex) { if (onSuccess) onSuccess(tex); },
-          undefined,
-          function(err) {
-            var img = new Image();
-            try { img.crossOrigin = 'anonymous'; } catch(e) {}
-            img.onload = function() {
-              try {
-                var tex2 = new THREE.Texture(img);
-                tex2.needsUpdate = true;
-                tex2.generateMipmaps = true;
-                tex2.minFilter = THREE.LinearMipMapLinearFilter;
-                tex2.magFilter = THREE.LinearFilter;
-                if (onSuccess) onSuccess(tex2);
-              } catch (ee) {
-                if (onError) onError(ee);
-              }
-            };
-            img.onerror = function(e) { if (onError) onError(e); };
-            img.src = url;
-          }
-        );
-      } catch (e) {
-        var img2 = new Image();
-        try { img2.crossOrigin = 'anonymous'; } catch(e) {}
-        img2.onload = function() {
-          var tex3 = new THREE.Texture(img2);
-          tex3.needsUpdate = true;
-          if (onSuccess) onSuccess(tex3);
-        };
-        img2.onerror = function(ev) { if (onError) onError(ev); };
-        img2.src = url;
-      }
-    }
-
-    // apply a direct-loaded texture to a mesh and remember its URL
-    function applyTextureToMeshFromUrl(url, mesh, opts, ownerName) {
-      if (!url || !mesh) return;
-      loadTextureDirect(url, function(tex) {
-        try {
-          var key = ownerName || mesh.name || (mesh.parent ? mesh.parent.name : '');
-          loadedTextures[key] = tex;
-          loadedImageURLs[key] = url;
-
-          if (mesh.name === 'Sun' || key === 'Sun') {
-            mesh.material = new THREE.MeshBasicMaterial({ map: tex });
-            mesh.material.needsUpdate = true;
-            var existing = mesh.getObjectByName('sunGlow');
-            if (existing) mesh.remove(existing);
-            var glowScale = computeVisualRadius(696342) * 6; // smaller than before
-            var glow = createSunGlowSprite(glowScale);
-            mesh.add(glow);
-          } else {
-            if (mesh.material) {
-              mesh.material.map = tex;
-              mesh.material.needsUpdate = true;
-            } else {
-              mesh.material = new THREE.MeshPhongMaterial({ map: tex });
-              mesh.material.needsUpdate = true;
-            }
-          }
-
-          if (opts && opts.isRing) {
-            mesh.material.side = THREE.DoubleSide;
-            mesh.material.transparent = true;
-            mesh.material.opacity = 1.0;
-          }
-        } catch (err) {
-          console.warn('applyTextureToMesh error', mesh.name, err);
-        }
-      }, function(err) {
-        console.warn('texture load failed for', url, err);
-      });
-    }
-
-    // computeCameraApproach now returns orbit settings too
-    function computeCameraApproach(planetMesh) {
-      var litPoint = computeLitPoint(planetMesh);
-      var planetPos = new THREE.Vector3();
-      planetMesh.getWorldPosition(planetPos);
-      var planetRadius = computeVisualRadius(planetMesh.userData.realRadiusKm);
-      // move closer — smaller multiplier so users can see surface detail
-      var distance = Math.max(planetRadius * 3, 6);
-
-      var sun = findSun();
-      var sunPos = new THREE.Vector3(0,0,0);
-      if (sun) sun.getWorldPosition(sunPos);
-      var viewDir = litPoint.clone().sub(sunPos).normalize();
-      if (viewDir.length() === 0) viewDir.set(0, 0.5, 1).normalize();
-
-      var camPos = litPoint.clone().add(viewDir.clone().multiplyScalar(distance));
-      camPos.y += Math.max(1, planetRadius * 0.45);
-
-      // orbit radius slightly larger than planet radius but less than approach distance
-      var orbitRadius = Math.max(planetRadius * 1.4, distance * 0.9);
-      var orbitElevation = Math.max(planetRadius * 0.35, 0.5);
-
+    const smoothed = newLandmarks.map((lm, i) => {
+      const prev = prevLandmarksRef.current[i];
       return {
-        camPos: camPos,
-        lookAt: litPoint,
-        holdDuration: 5000,
-        orbitRadius: orbitRadius,
-        orbitElevation: orbitElevation
+        x: prev ? prev.x + SMOOTHING * (lm.x - prev.x) : lm.x,
+        y: prev ? prev.y + SMOOTHING * (lm.y - prev.y) : lm.y,
+        z: lm.z,
+        visibility: lm.visibility
       };
+    });
+    prevLandmarksRef.current = smoothed;
+    return smoothed;
+  }, []);
+
+  const drawSkeleton = useCallback((ctx, landmarks, canvasWidth, canvasHeight) => {
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+    ctx.strokeStyle = '#00ff00';
+    ctx.lineWidth = 3;
+    ctx.shadowColor = '#00ff00';
+    ctx.shadowBlur = 10;
+    ctx.animation = 'neon-pulse 1s infinite';
+
+    POSE_CONNECTIONS.forEach(([i, j]) => {
+      const p1 = landmarks[i];
+      const p2 = landmarks[j];
+      if (p1.visibility > 0.5 && p2.visibility > 0.5) {
+        ctx.beginPath();
+        ctx.moveTo(p1.x * canvasWidth, p1.y * canvasHeight);
+        ctx.lineTo(p2.x * canvasWidth, p2.y * canvasHeight);
+        ctx.stroke();
+      }
+    });
+
+    // Draw landmarks as small green dots
+    landmarks.forEach((lm) => {
+      if (lm.visibility > 0.5) {
+        ctx.beginPath();
+        ctx.arc(lm.x * canvasWidth, lm.y * canvasHeight, 4, 0, 2 * Math.PI);
+        ctx.fillStyle = '#00ff00';
+        ctx.fill();
+      }
+    });
+    ctx.shadowBlur = 0;
+  }, []);
+
+  const drawRobot = useCallback((ctx, landmarks, canvasWidth, canvasHeight) => {
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+    
+    // Robot body structure with neon cyberpunk style
+    ctx.strokeStyle = '#ff00ff';
+    ctx.lineWidth = 5;
+    ctx.shadowColor = '#ff00ff';
+    ctx.shadowBlur = 15;
+
+    // Head (enhanced with face details)
+    const nose = landmarks[0];
+    const leftEye = landmarks[1];
+    const rightEye = landmarks[2];
+    if (nose && leftEye && rightEye && nose.visibility > 0.5) {
+      // Robot head circle
+      ctx.beginPath();
+      ctx.arc(nose.x * canvasWidth, (nose.y - 0.1) * canvasHeight, 0.08 * canvasHeight, 0, 2 * Math.PI);
+      ctx.stroke();
+      // Eyes as glowing orbs
+      ctx.beginPath();
+      ctx.arc(leftEye.x * canvasWidth, leftEye.y * canvasHeight, 0.015 * canvasHeight, 0, 2 * Math.PI);
+      ctx.fillStyle = '#00ffff';
+      ctx.shadowColor = '#00ffff';
+      ctx.shadowBlur = 20;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(rightEye.x * canvasWidth, rightEye.y * canvasHeight, 0.015 * canvasHeight, 0, 2 * Math.PI);
+      ctx.fill();
+      // Mouth line
+      const mouthTop = landmarks[9]; // approx mouth top
+      const mouthBottom = landmarks[10];
+      if (mouthTop && mouthBottom) {
+        ctx.beginPath();
+        ctx.moveTo(mouthTop.x * canvasWidth, mouthTop.y * canvasHeight);
+        ctx.lineTo(mouthBottom.x * canvasWidth, mouthBottom.y * canvasHeight);
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
     }
 
-    function createSolarSystem() {
-      const sunLight = new THREE.PointLight(0xffffff, 3.2, 0, 2);
-      sunLight.position.set(0,0,0);
-      scene.add(sunLight);
-      scene.add(new THREE.AmbientLight(0x333333, 0.6));
+    // Ears approx from pose (landmarks 7,8 for outer ears)
+    const leftEar = landmarks[7];
+    const rightEar = landmarks[8];
+    if (leftEar && rightEar && leftEar.visibility > 0.5) {
+      ctx.beginPath();
+      ctx.arc(leftEar.x * canvasWidth, leftEar.y * canvasHeight, 0.02 * canvasHeight, 0, 2 * Math.PI);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(rightEar.x * canvasWidth, rightEar.y * canvasHeight, 0.02 * canvasHeight, 0, 2 * Math.PI);
+      ctx.stroke();
+    }
 
-      planDefs.forEach(function(def) {
-        var name = def[0];
-        var realRadius = def[1];
-        var distAU = def[2];
-        var period = def[3];
-        var type = def[4];
-        var texKey = def[5];
+    // Neck
+    const leftShoulder = landmarks[11];
+    const rightShoulder = landmarks[12];
+    const neckY = (leftShoulder.y + rightShoulder.y) / 2 * canvasHeight;
+    if (nose && leftShoulder && rightShoulder) {
+      const neckStartY = nose.y * canvasHeight + 0.05 * canvasHeight;
+      ctx.beginPath();
+      ctx.moveTo(nose.x * canvasWidth, neckStartY);
+      ctx.lineTo((leftShoulder.x + rightShoulder.x)/2 * canvasWidth, neckY);
+      ctx.stroke();
+    }
 
-        var scaledR = computeVisualRadius(realRadius);
-        var scaledDist = computeVisualDistance(distAU);
+    // Torso
+    const leftHip = landmarks[23];
+    const rightHip = landmarks[24];
+    if (leftShoulder && rightShoulder && leftHip && rightHip) {
+      // Left side
+      ctx.beginPath();
+      ctx.moveTo(leftShoulder.x * canvasWidth, leftShoulder.y * canvasHeight);
+      ctx.lineTo(leftHip.x * canvasWidth, leftHip.y * canvasHeight);
+      ctx.stroke();
+      // Right side
+      ctx.beginPath();
+      ctx.moveTo(rightShoulder.x * canvasWidth, rightShoulder.y * canvasHeight);
+      ctx.lineTo(rightHip.x * canvasWidth, rightHip.y * canvasHeight);
+      ctx.stroke();
+      // Bottom bar
+      ctx.beginPath();
+      ctx.moveTo(leftHip.x * canvasWidth, leftHip.y * canvasHeight);
+      ctx.lineTo(rightHip.x * canvasWidth, rightHip.y * canvasHeight);
+      ctx.stroke();
+    }
 
-        var geo = new THREE.SphereGeometry(scaledR, 64, 64);
-        var mat = new THREE.MeshPhongMaterial({ color: typeColor[type] !== undefined ? typeColor[type] : 0x888888, shininess: 10 });
+    // Arms
+    if (leftShoulder && landmarks[13] && landmarks[15]) {
+      ctx.beginPath();
+      ctx.moveTo(leftShoulder.x * canvasWidth, leftShoulder.y * canvasHeight);
+      ctx.lineTo(landmarks[13].x * canvasWidth, landmarks[13].y * canvasHeight);
+      ctx.lineTo(landmarks[15].x * canvasWidth, landmarks[15].y * canvasHeight);
+      ctx.stroke();
+    }
+    if (rightShoulder && landmarks[14] && landmarks[16]) {
+      ctx.beginPath();
+      ctx.moveTo(rightShoulder.x * canvasWidth, rightShoulder.y * canvasHeight);
+      ctx.lineTo(landmarks[14].x * canvasWidth, landmarks[14].y * canvasHeight);
+      ctx.lineTo(landmarks[16].x * canvasWidth, landmarks[16].y * canvasHeight);
+      ctx.stroke();
+    }
 
-        var mesh = new THREE.Mesh(geo, mat);
-        mesh.name = name;
-        mesh.userData.realRadiusKm = realRadius;
-        mesh.userData.distanceAU = distAU;
-        mesh.userData.periodDays = period;
-        mesh.userData.type = type;
-        mesh.userData.isPlanet = true;
+    // Legs
+    if (leftHip && landmarks[25] && landmarks[27]) {
+      ctx.beginPath();
+      ctx.moveTo(leftHip.x * canvasWidth, leftHip.y * canvasHeight);
+      ctx.lineTo(landmarks[25].x * canvasWidth, landmarks[25].y * canvasHeight);
+      ctx.lineTo(landmarks[27].x * canvasWidth, landmarks[27].y * canvasHeight);
+      ctx.stroke();
+    }
+    if (rightHip && landmarks[26] && landmarks[28]) {
+      ctx.beginPath();
+      ctx.moveTo(rightHip.x * canvasWidth, rightHip.y * canvasHeight);
+      ctx.lineTo(landmarks[26].x * canvasWidth, landmarks[26].y * canvasHeight);
+      ctx.lineTo(landmarks[28].x * canvasWidth, landmarks[28].y * canvasHeight);
+      ctx.stroke();
+    }
 
-        if (name === 'Sun') {
-          mesh.position.set(0,0,0);
-          solarSystem.add(mesh);
-          planetMeshes.push(mesh);
-          var url = (typeof txt !== 'undefined' && txt['Sun']) ? txt['Sun'] : null;
-          if (url) applyTextureToMeshFromUrl(url, mesh, { }, 'Sun');
-        } else {
-          var orbitGroup = new THREE.Group();
-          orbitGroup.userData.orbitRadius = scaledDist;
-          orbitGroup.userData.periodDays = period;
-          mesh.position.set(scaledDist, 0, 0);
-          orbitGroup.add(mesh);
-          solarSystem.add(orbitGroup);
-          orbitGroups.push(orbitGroup);
+    // Robot joints as glowing dots
+    landmarks.forEach((lm, i) => {
+      if (lm.visibility > 0.5 && [0,11,12,23,24,13,14,25,26].includes(i)) { // key joints
+        ctx.beginPath();
+        ctx.arc(lm.x * canvasWidth, lm.y * canvasHeight, 8, 0, 2 * Math.PI);
+        ctx.fillStyle = '#ffff00';
+        ctx.shadowColor = '#ffff00';
+        ctx.shadowBlur = 15;
+        ctx.fill();
+      }
+    });
+    ctx.shadowBlur = 0;
+  }, []);
 
-          if (name === 'Saturn') {
-            var ringGeom = new THREE.RingGeometry(scaledR * 1.2, scaledR * 2.6, 128);
-            var ringMat = new THREE.MeshBasicMaterial({ color:0xffffff, side: THREE.DoubleSide, transparent:true, opacity:1.0 });
-            var ringMesh = new THREE.Mesh(ringGeom, ringMat);
-            ringMesh.rotation.x = -Math.PI/2;
-            ringMesh.name = 'SaturnRing';
-            ringMesh.renderOrder = 2;
-            mesh.add(ringMesh);
-            if (txt['SaturnRings']) applyTextureToMeshFromUrl(txt['SaturnRings'], ringMesh, { isRing:true }, 'Saturn');
-          }
-          if (name === 'Jupiter' || name === 'Uranus' || name === 'Neptune') {
-            var ringGeom2 = new THREE.RingGeometry(scaledR * 1.15, scaledR * 2.1, 64);
-            var ringMat2 = new THREE.MeshBasicMaterial({ color: 0xdddddd, side: THREE.DoubleSide, transparent:true, opacity:0.18 });
-            var ringMesh2 = new THREE.Mesh(ringGeom2, ringMat2);
-            ringMesh2.rotation.x = -Math.PI/2;
-            ringMesh2.name = name + 'Ring';
-            ringMesh2.renderOrder = 2;
-            mesh.add(ringMesh2);
-          }
+  const onPoseResults = useCallback((results) => {
+    if (results.poseLandmarks) {
+      setPoseDetected(true);
+      const smoothedLandmarks = generateSmoothedLandmarks(results.poseLandmarks);
 
-          var url = (typeof txt !== 'undefined' && txt[texKey]) ? txt[texKey] : null;
-          if (url) applyTextureToMeshFromUrl(url, mesh, { }, name);
+      // Draw on skeleton canvas (left)
+      if (skeletonCanvasRef.current) {
+        const ctx = skeletonCanvasRef.current.getContext('2d');
+        drawSkeleton(ctx, smoothedLandmarks, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
 
-          planetMeshes.push(mesh);
-        }
+      // Draw on robot canvas (right)
+      if (robotCanvasRef.current) {
+        const ctx = robotCanvasRef.current.getContext('2d');
+        drawRobot(ctx, smoothedLandmarks, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
+    } else {
+      setPoseDetected(false);
+      if (skeletonCanvasRef.current) {
+        const ctx = skeletonCanvasRef.current.getContext('2d');
+        ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
+      if (robotCanvasRef.current) {
+        const ctx = robotCanvasRef.current.getContext('2d');
+        ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      }
+    }
+  }, [generateSmoothedLandmarks, drawSkeleton, drawRobot]);
 
-        createLabel(mesh);
-        createOrbitRing(scaledDist);
+  // Start camera
+  const startCamera = async () => {
+    try {
+      setError('');
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { width: 640, height: 480 }
       });
-    }
-
-    function createOrbitRing(radius) {
-      if (radius === 0) return;
-      var pts = [];
-      var seg = 256;
-      for (var i=0;i<=seg;i++){
-        var a = (i/seg) * Math.PI * 2;
-        pts.push(new THREE.Vector3(radius * Math.cos(a), 0, radius * Math.sin(a)));
-      }
-      var g = new THREE.BufferGeometry().setFromPoints(pts);
-      var m = new THREE.LineBasicMaterial({ color:0x333333, linewidth:1 });
-      var line = new THREE.Line(g, m);
-      line.rotation.x = Math.PI / 2;
-      solarSystem.add(line);
-    }
-
-    function createLabel(mesh) {
-      var canvas = document.createElement('canvas');
-      canvas.width = 256; canvas.height = 64;
-      var ctx = canvas.getContext('2d');
-      ctx.clearRect(0,0,256,64);
-      ctx.font = '24px Arial';
-      ctx.fillStyle = '#d1fae5';
-      ctx.textAlign = 'center';
-      ctx.fillText(mesh.name, 128, 40);
-      var tex = new THREE.CanvasTexture(canvas);
-      var mat = new THREE.SpriteMaterial({ map: tex, transparent:true, depthTest:false });
-      var spr = new THREE.Sprite(mat);
-      spr.scale.set(10,3,1);
-      spr.userData.for = mesh;
-      scene.add(spr);
-      labelSprites.push(spr);
-    }
-
-    function createRocketVisual() {
-      var cube = new THREE.BoxGeometry(1.4,1.4,1.4);
-      var mat = new THREE.MeshBasicMaterial({ color:0xff9933, transparent:true, opacity:0.45 });
-      var mesh = new THREE.Mesh(cube, mat);
-      mesh.name = 'smoke';
-      mesh.position.set(0,-5,5);
-      camera.add(mesh);
-    }
-
-    function setupInput() {
-      document.addEventListener('pointerlockchange', onPointerLockChange, false);
-      document.addEventListener('mousemove', onMouseMove, false);
-
-      document.body.addEventListener('click', function(e){
-        if (!assetsLoaded) {
-          statusEl.textContent = 'Still loading assets — please wait';
-          return;
-        }
-        if (!cursorMode) {
-          if (document.pointerLockElement !== document.body) document.body.requestPointerLock();
-        }
+      streamRef.current = stream;
+      const video = videoRef.current;
+      video.srcObject = stream;
+      
+      await new Promise(resolve => {
+        video.onloadedmetadata = () => {
+          video.play();
+          resolve();
+        };
       });
+      
+      setStreaming(true);
 
-      function cancelOnInput() {
-        if (autoExplore) {
-          autoExplore = false;
-          document.getElementById('toggleAuto').textContent = 'Auto Explore: OFF';
-          stopAutoExplore();
-        }
-      }
-
-      document.addEventListener('keydown', function(e){
-        cancelOnInput();
-        switch(e.code) {
-          case 'ArrowUp': case 'KeyW': moveForward=true; break;
-          case 'ArrowLeft': case 'KeyA': moveLeft=true; break;
-          case 'ArrowDown': case 'KeyS': moveBackward=true; break;
-          case 'ArrowRight': case 'KeyD': moveRight=true; break;
-        }
-      }, false);
-      document.addEventListener('keyup', function(e){
-        switch(e.code) {
-          case 'ArrowUp': case 'KeyW': moveForward=false; break;
-          case 'ArrowLeft': case 'KeyA': moveLeft=false; break;
-          case 'ArrowDown': case 'KeyS': moveBackward=false; break;
-          case 'ArrowRight': case 'KeyD': moveRight=false; break;
-        }
-      }, false);
-
-      renderer.domElement.addEventListener('click', function(ev){
-        cancelOnInput();
-        if (ev.target !== renderer.domElement) return;
-        if (isPointerLocked && !cursorMode) raycaster.setFromCamera({ x:0, y:0 }, camera);
-        else {
-          var x = (ev.clientX / window.innerWidth) * 2 - 1;
-          var y = -(ev.clientY / window.innerHeight) * 2 + 1;
-          raycaster.setFromCamera({ x:x, y:y }, camera);
-        }
-        var inter = raycaster.intersectObjects(solarSystem.children, true);
-        if (inter.length > 0) {
-          var top = inter[0].object;
-          // if they aimed at the sunGlow sprite, ignore selection
-          if (top && top.name === 'sunGlow') {
-            // intentionally ignore clicking the glow
-            return;
-          }
-          selectPlanet(inter[0].object);
-        } else document.getElementById('detail-panel').classList.add('hidden');
-      }, false);
-
-      document.addEventListener('mousemove', function(ev){
-        cancelOnInput();
-        mouse.x = (ev.clientX / window.innerWidth) * 2 - 1;
-        mouse.y = -(ev.clientY / window.innerHeight) * 2 + 1;
-      }, false);
-
-      document.getElementById('focusBtn').addEventListener('click', function(){
-        if (!focusTarget) return;
-        isFocusing = !isFocusing;
-        this.textContent = isFocusing ? 'Unfocus' : 'Focus';
-        if (isFocusing) startFocus(focusTarget);
-        else stopFocus();
+      // Init MediaPipe Pose
+      poseRef.current = new Pose({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5/${file}`
       });
-    }
-
-    function onPointerLockChange() {
-      if (document.pointerLockElement === document.body) {
-        isPointerLocked = true;
-        document.body.classList.add('pointer-locked');
-        document.getElementById('instruction-panel').classList.add('hidden');
-      } else {
-        isPointerLocked = false;
-        document.body.classList.remove('pointer-locked');
-        document.getElementById('instruction-panel').classList.remove('hidden');
-      }
-    }
-
-    function onMouseMove(e) {
-      if (!isPointerLocked) return;
-      var mx = e.movementX || 0;
-      var my = e.movementY || 0;
-      rotationX -= mx * lookSensitivity;
-      rotationY -= my * lookSensitivity;
-      rotationY = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotationY));
-      camera.rotation.set(rotationY, rotationX, 0, 'YXZ');
-    }
-
-    // climb until we find a parent marked as planet
-    function climbToPlanet(mesh) {
-      var m = mesh;
-      while (m && (!m.userData || !m.userData.isPlanet)) {
-        m = m.parent;
-      }
-      return m;
-    }
-
-    function selectPlanet(obj) {
-      var mesh = climbToPlanet(obj);
-      if (!mesh) return;
-      showDetail(mesh);
-      focusTarget = mesh;
-      isFocusing = false;
-      document.getElementById('focusBtn').textContent = 'Focus';
-    }
-
-    function showDetail(mesh) {
-      // do not show details when the pointing target was the sunGlow earlier
-      // (hover logic prevents show for sunGlow)
-      var name = mesh.name;
-      var data = mesh.userData || {};
-      document.getElementById('planet-name').textContent = name.toUpperCase();
-      document.getElementById('planet-type').textContent = data.type || 'Unknown';
-      document.getElementById('planet-radius-real').textContent = (data.realRadiusKm || 0).toLocaleString();
-      document.getElementById('planet-radius-vis').textContent = computeVisualRadius(data.realRadiusKm).toFixed(3);
-
-      var imgEl = document.getElementById('planet-img');
-      try { imgEl.crossOrigin = 'anonymous'; } catch(e) {}
-      if (loadedImageURLs[name]) {
-        imgEl.src = loadedImageURLs[name];
-      } else {
-        var imgUrl = (typeof txt !== 'undefined' && txt[name]) ? txt[name] : '';
-        imgEl.src = imgUrl ? imgUrl : '';
-      }
-      document.getElementById('detail-panel').classList.remove('hidden');
-    }
-
-    function startFocus(mesh) {
-      var worldPos = new THREE.Vector3();
-      mesh.getWorldPosition(worldPos);
-      focusDistance = computeVisualRadius(mesh.userData.realRadiusKm) * 4 + 1.5;
-      camera.position.copy(worldPos.clone().add(new THREE.Vector3(focusDistance, focusDistance*0.3, 0)));
-      camera.lookAt(worldPos);
-    }
-    function stopFocus() {
-      camera.position.set(0,50,120);
-      camera.lookAt(new THREE.Vector3(0,0,0));
-      focusTarget = null;
-    }
-
-    // -------------------- Auto-explore (lit-point + orbit during hold) --------------------
-
-    function findSun() {
-      for (var i = 0; i < planetMeshes.length; i++) {
-        if (planetMeshes[i].name === 'Sun') return planetMeshes[i];
-      }
-      return null;
-    }
-
-    function computeLitPoint(planetMesh) {
-      var sun = findSun();
-      var sunPos = new THREE.Vector3(0,0,0);
-      if (sun) sun.getWorldPosition(sunPos);
-
-      var planetPos = new THREE.Vector3();
-      planetMesh.getWorldPosition(planetPos);
-
-      var dirToSun = sunPos.clone().sub(planetPos);
-      if (dirToSun.length() === 0) dirToSun.set(1,0,0);
-      dirToSun.normalize();
-
-      var r = computeVisualRadius(planetMesh.userData.realRadiusKm);
-      var lit = planetPos.clone().add(dirToSun.clone().multiplyScalar(r * 1.02));
-      return lit;
-    }
-
-    function easeInOutQuad(t) {
-      if (t < 0.5) return 2 * t * t;
-      return -1 + (4 - 2 * t) * t;
-    }
-
-    function scheduleNextAutoMove() {
-      if (!autoExplore) return;
-      var candidates = planetMeshes.slice(0);
-      if (candidates.length === 0) return;
-
-      autoIndex = autoIndex % candidates.length;
-      var target = candidates[autoIndex];
-      autoIndex += 1;
-
-      var approach = computeCameraApproach(target);
-      var fromPos = camera.position.clone();
-      var fromLookAt = camera.position.clone().add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(100));
-
-      var distBetween = fromPos.distanceTo(approach.camPos);
-      var base = 900;
-      var duration = Math.max(1200, Math.min(7000, base + distBetween * 60));
-
-      // add orbit params for hold-phase
-      var rotations = 1.0 + Math.random() * 0.6; // between 1.0 and 1.6 rotations
-      var orbitAngularVel = (rotations * 2 * Math.PI) / approach.holdDuration;
-
-      autoMove = {
-        phase: 'approach',
-        start: performance.now(),
-        duration: duration,
-        fromPos: fromPos,
-        toPos: approach.camPos,
-        fromLookAt: fromLookAt,
-        toLookAt: approach.lookAt,
-        holdStart: null,
-        holdDuration: approach.holdDuration,
-        owner: target,
-        orbitRadius: approach.orbitRadius,
-        orbitElevation: approach.orbitElevation,
-        orbitAngularVel: orbitAngularVel,
-        orbitStartAngle: Math.random() * Math.PI * 2
-      };
-    }
-
-    function updateAutoExplore(now) {
-      if (!autoExplore || !autoMove) return;
-
-      var elapsed = now - autoMove.start;
-      if (autoMove.phase === 'approach') {
-        var t = elapsed / autoMove.duration;
-        if (t >= 1) {
-          camera.position.copy(autoMove.toPos);
-          camera.lookAt(autoMove.toLookAt);
-          autoMove.phase = 'hold';
-          autoMove.holdStart = performance.now();
-          return;
-        }
-        var e = easeInOutQuad(t);
-        camera.position.lerpVectors(autoMove.fromPos, autoMove.toPos, e);
-        var look = new THREE.Vector3().lerpVectors(autoMove.fromLookAt, autoMove.toLookAt, e);
-        camera.lookAt(look);
-      } else if (autoMove.phase === 'hold') {
-        var owner = autoMove.owner;
-        if (!owner) { autoMove = null; scheduleNextAutoMove(); return; }
-        // orbiting around lit point
-        var lit = computeLitPoint(owner);
-        var holdElapsed = now - autoMove.holdStart;
-        var a = autoMove.orbitStartAngle + autoMove.orbitAngularVel * holdElapsed;
-        // compute orbital position (x,z) around lit
-        var ox = Math.cos(a) * autoMove.orbitRadius;
-        var oz = Math.sin(a) * autoMove.orbitRadius;
-        var oy = autoMove.orbitElevation;
-        camera.position.set(lit.x + ox, lit.y + oy, lit.z + oz);
-        camera.lookAt(lit);
-
-        if (holdElapsed >= autoMove.holdDuration) {
-          var leaveFrom = camera.position.clone();
-          var leaveTo = camera.position.clone().add(new THREE.Vector3(0, Math.max(1, computeVisualRadius(owner.userData.realRadiusKm)*0.6), -Math.max(2, computeVisualRadius(owner.userData.realRadiusKm)*1.5)));
-          autoMove = {
-            phase: 'leave',
-            start: performance.now(),
-            duration: 800,
-            fromPos: leaveFrom,
-            toPos: leaveTo,
-            fromLookAt: lit.clone(),
-            toLookAt: lit.clone()
-          };
-          setTimeout(function() {
-            if (autoExplore) scheduleNextAutoMove();
-          }, 850);
-        }
-      } else if (autoMove.phase === 'leave') {
-        var t2 = (now - autoMove.start) / autoMove.duration;
-        if (t2 >= 1) {
-          camera.position.copy(autoMove.toPos);
-          camera.lookAt(autoMove.toLookAt);
-          autoMove = null;
-          return;
-        }
-        var e2 = easeInOutQuad(t2);
-        camera.position.lerpVectors(autoMove.fromPos, autoMove.toPos, e2);
-        var look2 = new THREE.Vector3().lerpVectors(autoMove.fromLookAt, autoMove.toLookAt, e2);
-        camera.lookAt(look2);
-      }
-    }
-
-    // raycast and hover handling: always climb to planet owner; ignore sunGlow hits
-    function performHoverRaycast() {
-      if (cursorMode) raycaster.setFromCamera(mouse, camera);
-      else raycaster.setFromCamera({ x:0, y:0 }, camera);
-      var hits = raycaster.intersectObjects(solarSystem.children, true);
-      if (hits.length > 0) {
-        var top = hits[0].object;
-        // if top is the sun glow sprite, ignore hover entirely
-        if (top && top.name === 'sunGlow') {
-          // hide detail and return — do not treat glow as clickable geometry
-          if (lastHovered !== null) {
-            document.getElementById('detail-panel').classList.add('hidden');
-            planetMeshes.forEach(function(m){ if (m.material && m.material.emissive) m.material.emissive.setHex(0x000000); });
-            lastHovered = null;
-          }
-          return;
-        }
-        var owner = climbToPlanet(top);
-        if (!owner) return;
-        if (lastHovered === null || lastHovered !== owner) {
-          showDetail(owner);
-          lastHovered = owner;
-        }
-        // remove previous highlights
-        planetMeshes.forEach(function(m){
-          if (m.material && m.material.emissive) m.material.emissive.setHex(0x000000);
-        });
-        // highlight owner if possible, but do NOT emissive-highlight the Sun (prevents double-bright)
-        if (owner.name !== 'Sun' && owner.material && owner.material.emissive) {
-          owner.material.emissive.setHex(0x114422);
-        }
-      } else {
-        if (lastHovered !== null) {
-          document.getElementById('detail-panel').classList.add('hidden');
-          planetMeshes.forEach(function(m){ if (m.material && m.material.emissive) m.material.emissive.setHex(0x000000); });
-          lastHovered = null;
-        }
-      }
-    }
-
-    function loop() {
-      var delta = clock.getDelta();
-      var now = performance.now();
-      if (!paused) {
-        updateMovement(delta);
-        updateOrbits(delta);
-      }
-      updateSmoke();
-      updateLabels();
-      performHoverRaycast();
-      if (isFocusing && focusTarget) updateFocus(delta);
-      updateAutoExplore(now);
-      renderer.render(scene, camera);
-    }
-
-    function updateMovement(delta) {
-      if (moveForward) camera.translateZ(-playerSpeed * delta);
-      if (moveBackward) camera.translateZ(playerSpeed * delta);
-      if (moveLeft) camera.translateX(-playerSpeed * delta);
-      if (moveRight) camera.translateX(playerSpeed * delta);
-    }
-
-    function updateOrbits(delta) {
-      orbitGroups.forEach(function(group){
-        if (group.userData && group.userData.periodDays && group.userData.periodDays > 0) {
-          var periodDays = group.userData.periodDays;
-          var angVelReal = (2 * Math.PI) / (periodDays * SECONDS_PER_DAY);
-          var ang = angVelReal * delta * timeScale;
-          group.rotation.y += ang;
-        }
+      poseRef.current.setOptions({
+        modelComplexity: 1,
+        smoothLandmarks: true,
+        enableSegmentation: false,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
       });
-      planetMeshes.forEach(function(p){
-        if (p.name !== 'Sun') p.rotation.y += 0.005;
+      poseRef.current.onResults(onPoseResults);
+
+      cameraRef.current = new Camera(video, {
+        onFrame: async () => {
+          await poseRef.current.send({ image: video });
+        },
+        width: 640,
+        height: 480
       });
+      cameraRef.current.start();
+    } catch (err) {
+      setError('Camera access denied. Please allow camera access.');
+      console.error('Camera error:', err);
     }
+  };
 
-    function updateFocus(delta) {
-      if (!focusTarget) return;
-      var worldPos = new THREE.Vector3();
-      focusTarget.getWorldPosition(worldPos);
-      var t = clock.getElapsedTime();
-      var angle = t * 0.4;
-      var x = worldPos.x + Math.cos(angle) * focusDistance;
-      var z = worldPos.z + Math.sin(angle) * focusDistance;
-      var y = worldPos.y + focusDistance * 0.2;
-      camera.position.set(x, y, z);
-      camera.lookAt(worldPos);
+  // Stop camera
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
+    if (cameraRef.current) {
+      cameraRef.current.stop();
+    }
+    if (poseRef.current) {
+      poseRef.current.close();
+    }
+    setStreaming(false);
+    setPoseDetected(false);
+    prevLandmarksRef.current = null;
+    if (skeletonCanvasRef.current) {
+      const ctx = skeletonCanvasRef.current.getContext('2d');
+      ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    }
+    if (robotCanvasRef.current) {
+      const ctx = robotCanvasRef.current.getContext('2d');
+      ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    }
+  };
 
-    function updateSmoke() {
-      var smoke = camera.getObjectByName('smoke');
-      if (smoke) {
-        var t = clock.getElapsedTime();
-        var s = 1 + Math.abs(Math.sin(t * 8)) * 0.7;
-        smoke.scale.set(s,s,s);
-        smoke.material.opacity = 0.4 + Math.abs(Math.sin(t * 4)) * 0.4;
+  useEffect(() => {
+    // Resize canvases on window resize
+    const resize = () => {
+      if (skeletonCanvasRef.current) {
+        skeletonCanvasRef.current.width = window.innerWidth / 2;
+        skeletonCanvasRef.current.height = window.innerHeight;
       }
-    }
-
-    function updateLabels() {
-      labelSprites.forEach(function(s){
-        var target = s.userData.for;
-        if (!target) return;
-        var pos = new THREE.Vector3();
-        target.getWorldPosition(pos);
-        s.position.copy(pos);
-        s.position.y += computeVisualRadius(target.userData.realRadiusKm) + 2.5;
-        s.visible = labelsEnabled;
-      });
-    }
-
-    function onResize() {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    }
-
-    function startAutoExplore() { scheduleNextAutoMove(); }
-    function stopAutoExplore() { autoMove = null; }
-
-    // Start preload immediately when script runs
-    (async function bootstrap() {
-      try {
-        await preloadAllTextures();
-      } catch (err) {
-        console.error('Preload failed', err);
-      } finally {
-        try {
-          init();
-        } catch (e) {
-          console.error('Init failed', e);
-        }
+      if (robotCanvasRef.current) {
+        robotCanvasRef.current.width = window.innerWidth / 2;
+        robotCanvasRef.current.height = window.innerHeight;
       }
-    })();
+    };
+    window.addEventListener('resize', resize);
+    resize();
+    return () => window.removeEventListener('resize', resize);
+  }, []);
 
-  </script>
+  useEffect(() => {
+    return () => stopCamera();
+  }, []);
+
+  if (error) {
+    return (
+      <div style={{display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'#000', color:'#fff', fontSize:'18px'}}>
+        <div>{error} <button className="btn primary" onClick={startCamera} style={{marginLeft:'10px'}}>Retry</button></div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{width:'100vw',height:'100vh',position:'relative'}}>
+      {/* Model Containers Side by Side */}
+      <div className="model-container">
+        <canvas ref={skeletonCanvasRef} className="model-canvas skeleton-canvas" />
+        <canvas ref={robotCanvasRef} className="model-canvas robot-canvas" />
+      </div>
+
+      {/* Small Video Feed Bottom Left */}
+      <div id="video-container">
+        <video ref={videoRef} autoPlay playsInline muted />
+      </div>
+
+      {/* Status */}
+      <div className="status">
+        <span className="status-indicator"></span>
+        {streaming ? (poseDetected ? 'Pose Tracked' : 'Searching Pose') : 'Camera Off'}
+      </div>
+
+      {/* Controls */}
+      <div className="controls">
+        {!streaming ? (
+          <button className="btn primary" onClick={startCamera}>
+            📹 Start Tracking
+          </button>
+        ) : (
+          <button className="btn danger" onClick={stopCamera}>
+            ⏹️ Stop Tracking
+          </button>
+        )}
+      </div>
+
+      {/* Guidelines */}
+      {showGuidelines && (
+        <div className="guidelines-panel">
+          <button className="toggle-btn" onClick={() => setShowGuidelines(false)}>✕</button>
+          <h3>Pose Tracking Guidelines</h3>
+          <ul>
+            <li>Stand in full view of the camera</li>
+            <li>Keep good lighting</li>
+            <li>Move slowly for smooth tracking</li>
+            <li>Left: Raw Skeleton | Right: Robot Model</li>
+            <li>Watch the neon transformations!</li>
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const root = createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
 </body>
 </html>
