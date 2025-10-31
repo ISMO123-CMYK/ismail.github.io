@@ -1,570 +1,1090 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Government Face Recognition System</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  html,body,#root{height:100%}
-  body{font-family:Segoe UI, Tahoma, Geneva, Verdana, sans-serif;background:#000;color:#fff;overflow:hidden}
-  #root{width:100vw;height:100vh;position:relative}
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Galactic Navigator — Orbiting AutoExplore + Sun Glow Fix</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="importmap">
+  { "imports": { "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js" } }
+  </script>
+  <style>
+    body { margin:0; background:#000; font-family:Inter, sans-serif; overflow:hidden; }
+    #canvas-container { position:fixed; inset:0; z-index:0; }
+    .ui-panel { position:absolute; background: rgba(17,24,39,0.95);
+      border:2px solid #6366f1; color:#d1d5db; padding:1rem; border-radius:10px;
+      z-index:100; max-width:420px; box-shadow: 0 10px 20px rgba(0,0,0,0.7); }
+    #crosshair { pointer-events:none; position:fixed; z-index:150; left:50%; top:50%;
+      transform:translate(-50%,-50%); width:48px; height:48px; display:flex;
+      align-items:center; justify-content:center; }
+    body.pointer-locked { cursor:none; }
+    .small { font-size:0.85rem; color:#c7d2fe; }
+    .btn { cursor:pointer; user-select:none; margin-right:6px; }
+    .controls-row { display:flex; gap:8px; align-items:center; margin-top:8px; }
 
-  /* Video + Canvas */
-  #video-container{position:absolute;inset:0;background:#111;z-index:1}
-  video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
-  canvas#mainCanvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;transform:scaleX(-1);z-index:2}
-
-  /* Person Cards */
-  .person-card{position:absolute;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:12px;padding:12px;min-width:200px;backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);box-shadow:0 10px 35px rgba(0,0,0,0.4);transform:translate(-50%,-100%);transition:all .2s ease;z-index:6;cursor:pointer}
-  .person-card:hover{transform:translate(-50%,-100%) scale(1.05)}
-  .person-card.mock-data{background:linear-gradient(135deg,#f39c12,#e67e22);border-color:rgba(255,193,7,0.3)}
-  .person-card.good-match{background:linear-gradient(135deg,#27ae60,#2ecc71);border-color:rgba(76,175,80,0.3)}
-  .person-card.weak-match{background:linear-gradient(135deg,#e74c3c,#c0392b);border-color:rgba(244,67,54,0.3)}
-
-  .person-header{display:flex;gap:10px;align-items:center;margin-bottom:8px}
-  .avatar{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;background:linear-gradient(45deg,#ff6b6b,#4ecdc4)}
-  .person-name{font-weight:700;font-size:15px}
-  .person-id{font-size:11px;color:#e8e8e8;font-family:monospace}
-  .confidence-badge{position:absolute;top:-8px;right:-8px;background:rgba(0,0,0,0.8);color:#fff;padding:4px 8px;border-radius:12px;font-size:10px;font-weight:600}
-  .person-details{font-size:12px;color:#f0f0f0;line-height:1.3}
-  .detail-row{display:flex;justify-content:space-between;margin:2px 0}
-  .detail-label{color:#ddd}
-  .mock-badge{background:linear-gradient(45deg,#f39c12,#e67e22);color:#fff;padding:2px 6px;border-radius:8px;font-size:9px;margin-top:4px;display:inline-block}
-
-  /* UI controls */
-  .status{position:absolute;top:16px;left:16px;background:rgba(0,0,0,0.65);padding:10px 16px;border-radius:20px;z-index:9;font-size:14px}
-  .status-indicator{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px}
-  .status-indicator.active{background:#4caf50}
-  .status-indicator.inactive{background:#f44336}
-
-  .controls{position:absolute;bottom:16px;left:16px;display:flex;gap:12px;z-index:9}
-  .btn{padding:10px 16px;border-radius:25px;border:none;cursor:pointer;background:linear-gradient(45deg,#667eea,#764ba2);color:#fff;font-weight:600;transition:all .2s ease;font-size:14px}
-  .btn:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(102,126,234,0.4)}
-  .btn.secondary{background:linear-gradient(45deg,#555,#777)}
-  .btn.primary{background:linear-gradient(45deg,#4caf50,#45a049)}
-  .btn.danger{background:linear-gradient(45deg,#f44336,#d32f2f)}
-  .btn:disabled{background:#666;cursor:not-allowed;transform:none;box-shadow:none}
-  
-  .search-controls{position:absolute;bottom:16px;right:16px;display:flex;gap:8px;z-index:9}
-  .capture-btn{width:64px;height:64px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(45deg,#ff6b6b,#4ecdc4);color:#fff;font-size:24px;transition:all .2s ease;display:flex;align-items:center;justify-content:center}
-  .capture-btn:hover{transform:scale(1.1);box-shadow:0 8px 25px rgba(255,107,107,0.4)}
-  .capture-btn:disabled{background:#666;cursor:not-allowed;transform:none}
-
-  .add-person-btn{padding:8px 12px;border-radius:20px;border:none;cursor:pointer;background:linear-gradient(45deg,#9c27b0,#673ab7);color:#fff;font-weight:600;font-size:12px;margin-top:8px}
-
-  /* Loading overlay */
-  .loading-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:50}
-  .loading-spinner{width:40px;height:40px;border:4px solid rgba(255,255,255,0.2);border-top:4px solid #fff;border-radius:50%;animation:spin 1s linear infinite}
-  @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
-
-  /* Modal */
-  .modal{display:none;position:fixed;inset:0;align-items:center;justify-content:center;background:rgba(0,0,0,0.8);z-index:999}
-  .modal.active{display:flex}
-  .modal-content{background:#1a1a1a;color:#fff;border-radius:12px;padding:20px;max-width:400px;width:90%;max-height:90%;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.8);border:1px solid #333}
-  .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:10px;border-bottom:1px solid #333}
-  .modal-header h3{margin:0;font-size:18px;color:#fff}
-  .close{cursor:pointer;font-weight:700;padding:8px;border-radius:8px;background:#333;color:#fff;border:none;transition:background .2s}
-  .close:hover{background:#555}
-
-  .form-group{margin-bottom:16px}
-  .form-label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:#ddd}
-  .form-input{width:100%;padding:10px;border:1px solid #444;border-radius:8px;background:#2a2a2a;color:#fff;font-size:14px}
-  .form-input:focus{border-color:#667eea;outline:none;box-shadow:0 0 0 2px rgba(102,126,234,0.2)}
-  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-
-  .error-message{background:rgba(244,67,54,0.2);border:1px solid #f44336;color:#ffcdd2;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px}
-  .success-message{background:rgba(76,175,80,0.2);border:1px solid #4caf50;color:#c8e6c9;padding:12px;border-radius:8px;margin-bottom:16px;font-size:13px}
-
-  @media (max-width:480px){
-    .person-card{min-width:160px;padding:10px;font-size:11px}
-    .controls{bottom:12px;left:12px;gap:8px}
-    .search-controls{bottom:12px;right:12px}
-    .capture-btn{width:56px;height:56px;font-size:20px}
-  }
-</style>
+    /* Loading overlay */
+    #loading-overlay {
+      position:fixed; inset:0; z-index:9999;
+      display:flex; align-items:center; justify-content:center;
+      background:linear-gradient(180deg, rgba(2,6,23,0.95), rgba(2,6,23,0.88));
+      color:#e6eef8; font-family:Inter, sans-serif;
+      -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+      flex-direction:column; padding:20px;
+    }
+    #loading-box {
+      width:520px; max-width:92%;
+      background: rgba(10,12,20,0.5);
+      border:1px solid rgba(99,102,241,0.12);
+      padding:18px; border-radius:12px; text-align:center;
+      box-shadow: 0 12px 30px rgba(2,6,23,0.6);
+    }
+    .loader-spinner {
+      width:56px; height:56px; margin:0 auto 12px; border-radius:50%;
+      border:6px solid rgba(255,255,255,0.06); border-top-color:#60a5fa;
+      animation:spin 1.05s linear infinite;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    #progress-bar {
+      width:100%; height:10px; background:rgba(255,255,255,0.06); border-radius:6px; overflow:hidden; margin-top:12px;
+    }
+    #progress-fill { height:100%; width:0%; background:linear-gradient(90deg,#60a5fa,#34d399); }
+    #loading-meta { margin-top:8px; color:#c7d2fe; font-size:0.92rem; }
+    #retry-btn { margin-top:12px; display:none; }
+  </style>
 </head>
 <body>
-<div id="root"></div>
+  <div id="canvas-container"></div>
 
-<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Loading overlay -->
+  <div id="loading-overlay" aria-live="polite">
+    <div id="loading-box">
+      <div class="loader-spinner" role="img" aria-label="Loading"></div>
+      <div style="font-size:1.1rem;font-weight:700;color:#e6eef8">Loading textures & assets</div>
+      <div id="loading-status" style="margin-top:8px;color:#c7d2fe">Preparing...</div>
+      <div id="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div id="progress-fill"></div>
+      </div>
+      <div id="loading-meta">0 / 0</div>
+      <button id="retry-btn" class="btn px-3 py-1 bg-indigo-600 rounded text-white text-sm">Retry Failed</button>
+    </div>
+  </div>
 
-<script type="text/babel">
-const { useState, useEffect, useRef } = React;
-const { createRoot } = ReactDOM;
+  <div id="instruction-panel" class="ui-panel top-4 left-4">
+    <h2 class="text-xl font-bold text-indigo-400 mb-2">Controls</h2>
+    <p class="text-sm text-yellow-300"><span class="font-mono text-yellow-400">Click</span> pointer lock. Toggle Cursor Mode to show mouse.</p>
+    <div class="controls-row">
+      <button id="toggleMode" class="btn px-2 py-1 bg-indigo-600 rounded text-white text-xs">Cursor Mode: OFF</button>
+      <button id="toggleAuto" class="btn px-2 py-1 bg-slate-700 rounded text-white text-xs">Auto Explore: OFF</button>
+      <button id="toggleLabels" class="btn px-2 py-1 bg-slate-700 rounded text-white text-xs">Labels: ON</button>
+    </div>
+  </div>
 
-const API_BASE = 'http://localhost:3000/api';
+  <div id="detail-panel" class="ui-panel bottom-4 right-4 hidden">
+    <h2 id="planet-name" class="text-2xl font-extrabold text-white mb-1"></h2>
+    <img id="planet-img" alt="planet" style="width:220px;height:auto;border-radius:8px;margin-bottom:8px"/>
+    <div class="small" style="line-height:1.35">
+      <div>Type: <span id="planet-type"></span></div>
+      <div>Radius (real): <span id="planet-radius-real"></span> km</div>
+      <div>Radius (visual): <span id="planet-radius-vis"></span> units</div>
+    </div>
+    <div class="controls-row mt-3">
+      <button id="focusBtn" class="btn px-2 py-1 bg-green-600 rounded text-white text-xs">Focus</button>
+      <button id="close-detail" class="btn px-2 py-1 bg-red-600 rounded text-white text-xs">Close</button>
+    </div>
+  </div>
 
-function App() {
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const streamRef = useRef(null);
-  const modalRef = useRef(null);
-  
-  const [streaming, setStreaming] = useState(false);
-  const [faces, setFaces] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [capturedImage, setCapturedImage] = useState(null);
-  const [stats, setStats] = useState(null);
-  
-  // Add person form
-  const [addPersonData, setAddPersonData] = useState({
-    name: '', id: '', age: '', state: '', department: '', occupation: ''
-  });
+  <div id="crosshair">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#00ff99" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="6" stroke-opacity="0.95"></circle>
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke-opacity="0.85"/>
+    </svg>
+  </div>
 
-  // Start camera
-  const startCamera = async () => {
-    try {
-      setError('');
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 1280, height: 720 }
-      });
-      streamRef.current = stream;
-      const video = videoRef.current;
-      video.srcObject = stream;
-      
-      await new Promise(resolve => {
-        if (video.readyState >= 1 && video.videoWidth && video.videoHeight) return resolve();
-        const cb = () => { video.removeEventListener('loadedmetadata', cb); resolve(); };
-        video.addEventListener('loadedmetadata', cb);
-      });
-      
-      await video.play();
-      setStreaming(true);
-    } catch (err) {
-      setError('Camera access denied. Please allow camera access.');
-      console.error('Camera error:', err);
+  <script type="module">
+    import * as THREE from 'three';
+
+    // scales & timing
+    const VISUAL_DISTANCE_SCALE = 100.0;
+    const VISUAL_RADIUS_SCALE = 0.0001;
+    const SECONDS_PER_DAY = 86400;
+    let timeScale = 50000;
+    let cursorMode = false;
+    let labelsEnabled = true;
+    let paused = false;
+
+    // Track whether assets finished loading
+    let assetsLoaded = false;
+
+// Keep your original txt structure intact (URLs for proxying)
+const txt = {
+  Sun:     'https://www.solarsystemscope.com/textures/download/2k_sun.jpg',
+  Mercury: 'https://www.solarsystemscope.com/textures/download/2k_mercury.jpg',
+  Venus:   'https://www.solarsystemscope.com/textures/download/2k_venus_atmosphere.jpg',
+  Earth:   'https://www.solarsystemscope.com/textures/download/2k_earth_daymap.jpg',
+  Mars:    'https://www.solarsystemscope.com/textures/download/2k_mars.jpg',
+  Jupiter: 'https://www.solarsystemscope.com/textures/download/2k_jupiter.jpg',
+  Saturn:  'https://www.solarsystemscope.com/textures/download/2k_saturn.jpg',
+  SaturnRings: 'https://www.solarsystemscope.com/textures/download/2k_saturn_ring_alpha.png',
+  Uranus:  'https://www.solarsystemscope.com/textures/download/2k_uranus.jpg',
+  Neptune: 'https://www.solarsystemscope.com/textures/download/2k_neptune.jpg',
+  Pluto:   'https://upload.wikimedia.org/wikipedia/commons/a/ad/Pluto_color_mapmosaic.jpg'
+};
+
+    // UI elements for loading
+    const overlayEl = document.getElementById('loading-overlay');
+    const statusEl = document.getElementById('loading-status');
+    const metaEl = document.getElementById('loading-meta');
+    const fillEl = document.getElementById('progress-fill');
+    const retryBtn = document.getElementById('retry-btn');
+
+    // track preload state
+    let totalToLoad = 0;
+    let loadedCount = 0;
+    let failedKeys = [];
+
+    function setProgress(n, txtMsg) {
+      var pct = Math.round((n / Math.max(1, totalToLoad)) * 100);
+      fillEl.style.width = pct + '%';
+      metaEl.textContent = n + ' / ' + totalToLoad;
+      statusEl.textContent = txtMsg || ('Loading assets — ' + pct + '%');
+      var bar = document.getElementById('progress-bar');
+      if (bar) bar.setAttribute('aria-valuenow', String(pct));
     }
-  };
+    function showOverlay() { overlayEl.style.display = 'flex'; }
+    function hideOverlay() { overlayEl.style.display = 'none'; }
 
-  // Stop camera
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    setStreaming(false);
-    setFaces([]);
-  };
+    // Batch pre-load all textures via proxy (sequential for stability)
+    async function preloadAllTextures() {
+      totalToLoad = 0;
+      for (var k in txt) totalToLoad += 1;
+      loadedCount = 0;
+      failedKeys = [];
+      setProgress(0, 'Starting preload...');
+      showOverlay();
 
-  // Capture and search face
-  const captureAndSearch = async () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    
-    setLoading(true);
-    setError('');
-    setSuccess('');
-    
-    try {
-      const canvas = canvasRef.current;
-      const video = videoRef.current;
-      
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      
-      const ctx = canvas.getContext('2d');
-      // Flip the image back to normal orientation for the API
-      ctx.scale(-1, 1);
-      ctx.drawImage(video, -canvas.width, 0);
-      
-      canvas.toBlob(async (blob) => {
-        if (!blob) {
-          setError('Failed to capture image');
-          setLoading(false);
-          return;
-        }
+      var keys = [];
+      for (var kk in txt) keys.push(kk);
 
-        setCapturedImage(blob);
-        
-        const formData = new FormData();
-        formData.append('image', blob, 'capture.jpg');
-        
+      for (var i = 0; i < keys.length; i++) {
+        var key = keys[i];
         try {
-          const response = await fetch(`${API_BASE}/faces/search`, {
-            method: 'POST',
-            body: formData
-          });
-          
-          if (!response.ok) {
-            throw new Error(`Server error: ${response.status}`);
-          }
-          
-          const result = await response.json();
-          
-          if (result.success && result.match) {
-            // Create a face object for display
-            const faceData = {
-              id: Date.now(), // unique display id
-              x: canvas.width / 2,
-              y: canvas.height / 2,
-              width: 200,
-              height: 250,
-              person: result.match,
-              confidence: result.match.confidence,
-              isGoodMatch: result.match.isGoodMatch,
-              isMockData: result.match.isMockData
-            };
-            
-            setFaces([faceData]);
-            
-            if (result.match.isMockData) {
-              setSuccess('Face detected but not found in database. Showing mock data.');
-            } else if (result.match.isGoodMatch) {
-              setSuccess('Person identified successfully!');
-            } else {
-              setSuccess('Weak match found. Confidence is low.');
+          statusEl.textContent = 'Proxying ' + key + ' (' + (i+1) + '/' + totalToLoad + ')';
+          var proxyRes = await fetch('/proxy?url=' + encodeURIComponent(txt[key]));
+          if (proxyRes && proxyRes.ok) {
+            try {
+              var j = await proxyRes.json();
+              if (j && j.path) {
+                txt[key] = j.path; // replace with proxied local path
+                loadedCount += 1;
+                setProgress(loadedCount, 'Proxied ' + key);
+              } else {
+                failedKeys.push(key);
+                setProgress(loadedCount, 'Proxy returned unexpected data for ' + key);
+              }
+            } catch (je) {
+              failedKeys.push(key);
+              setProgress(loadedCount, 'Proxy parse failed for ' + key);
             }
           } else {
-            setError('No face detected in image');
+            failedKeys.push(key);
+            setProgress(loadedCount, 'Proxy failed for ' + key);
           }
-          
         } catch (err) {
-          setError(`Search failed: ${err.message}`);
-        } finally {
-          setLoading(false);
+          failedKeys.push(key);
+          setProgress(loadedCount, 'Network error for ' + key);
         }
-      }, 'image/jpeg', 0.8);
-      
-    } catch (err) {
-      setError(`Capture failed: ${err.message}`);
-      setLoading(false);
+        await new Promise(function(res) { setTimeout(res, 120); });
+      }
+
+      if (failedKeys.length > 0) {
+        statusEl.textContent = 'Proxy completed with ' + failedKeys.length + ' failures.';
+        retryBtn.style.display = 'inline-block';
+      } else {
+        statusEl.textContent = 'All textures proxied successfully.';
+        retryBtn.style.display = 'none';
+      }
+
+      await prewarmTextures();
+
+      assetsLoaded = true;
+      setProgress(totalToLoad, 'Assets ready.');
+      await new Promise(function(res) { setTimeout(res, 450); });
+      hideOverlay();
     }
-  };
 
-  // Add person to database
-  const addPersonToDatabase = async () => {
-    if (!capturedImage) {
-      setError('No captured image available');
-      return;
+    retryBtn.addEventListener('click', function() {
+      retryBtn.style.display = 'none';
+      (async function retryFailed() {
+        var retryList = failedKeys.slice(0);
+        failedKeys = [];
+        setProgress(0, 'Retrying failed items...');
+        showOverlay();
+        for (var i=0;i<retryList.length;i++) {
+          var key = retryList[i];
+          try {
+            statusEl.textContent = 'Retry proxy ' + key + ' (' + (i+1) + '/' + retryList.length + ')';
+            var proxyRes = await fetch('/proxy?url=' + encodeURIComponent(txt[key]));
+            if (proxyRes && proxyRes.ok) {
+              var j = await proxyRes.json();
+              if (j && j.path) {
+                txt[key] = j.path;
+              } else {
+                failedKeys.push(key);
+              }
+            } else {
+              failedKeys.push(key);
+            }
+          } catch (err) {
+            failedKeys.push(key);
+          }
+          await new Promise(function(res) { setTimeout(res, 120); });
+        }
+        await prewarmTextures();
+        if (failedKeys.length > 0) {
+          statusEl.textContent = 'Retry done. ' + failedKeys.length + ' still failed.';
+          retryBtn.style.display = 'inline-block';
+        } else {
+          statusEl.textContent = 'All textures proxied successfully.';
+          retryBtn.style.display = 'none';
+          assetsLoaded = true;
+          await new Promise(function(res) { setTimeout(res, 300); });
+          hideOverlay();
+        }
+      })();
+    });
+
+    async function prewarmTextures() {
+      var keys = [];
+      for (var k in txt) keys.push(k);
+      var N = keys.length;
+      var done = 0;
+      setProgress(0, 'Pre-warming textures...');
+      for (var i = 0; i < N; i++) {
+        var key = keys[i];
+        var url = txt[key];
+        try {
+          await new Promise(function(resolve, reject) {
+            var img = new Image();
+            try { img.crossOrigin = 'anonymous'; } catch (e) {}
+            img.onload = function() { resolve(true); };
+            img.onerror = function() { resolve(false); };
+            var t = setTimeout(function(){ resolve(false); }, 3500);
+            img.src = url;
+          });
+        } catch (e) {}
+        done += 1;
+        setProgress(done, 'Pre-warming ' + key + ' (' + done + '/' + N + ')');
+        await new Promise(function(res) { setTimeout(res, 90); });
+      }
+      setProgress(N, 'Pre-warm complete.');
     }
 
-    if (!addPersonData.name || !addPersonData.id) {
-      setError('Name and ID are required');
-      return;
-    }
 
-    setLoading(true);
-    setError('');
+// planets: [name, realRadiusKm, distAU, periodDays, type, textureKey]
+const planDefs = [
+  ['Sun',     696342,   0.0,    0,       'Star', 'Sun'],
+  ['Mercury', 2439.7,   0.387,  87.969,  'Rocky','Mercury'],
+  ['Venus',   6051.8,   0.723,  224.701, 'Rocky','Venus'],
+  ['Earth',   6371.0,   1.0,    365.256, 'Rocky','Earth'],
+  ['Mars',    3389.5,   1.524,  686.98,  'Rocky','Mars'],
+  ['Jupiter', 69911,    5.204,  4332.59, 'Gas Giant','Jupiter'],
+  ['Saturn',  58232,    9.582,  10759,   'Gas Giant','Saturn'],
+  ['Uranus',  25362,    19.201, 30687,   'Ice Giant','Uranus'],
+  ['Neptune', 24622,    30.047, 60190,   'Ice Giant','Neptune'],
+  ['Pluto',   1187,     39.48,  90560,   'Dwarf','Pluto']
+];
 
-    try {
-      const formData = new FormData();
-      formData.append('image', capturedImage, 'person.jpg');
-      formData.append('name', addPersonData.name);
-      formData.append('id', addPersonData.id);
-      
-      const metadata = {
-        age: parseInt(addPersonData.age) || 0,
-        state: addPersonData.state,
-        department: addPersonData.department,
-        occupation: addPersonData.occupation
-      };
-      
-      formData.append('metadata', JSON.stringify(metadata));
+const typeColor = { 
+  'Star': 0xffe07a, 
+  'Rocky': 0x7c9885, 
+  'Gas Giant': 0xd8c3a5, 
+  'Ice Giant': 0x9bd2e1,
+  'Dwarf': 0xc39953 
+};
+    // three essentials
+    let scene, camera, renderer, raycaster, textureLoader, clock;
+    const solarSystem = new THREE.Group();
+    const planetMeshes = [];
+    const orbitGroups = [];
+    const labelSprites = [];
+    const mouse = new THREE.Vector2(0,0);
+    let isPointerLocked = false;
+    let moveForward=false, moveBackward=false, moveLeft=false, moveRight=false;
+    let rotationX=0, rotationY=0;
+    const lookSensitivity = 0.002;
+    let playerSpeed = 20;
+    let lastHovered = null;
 
-      const response = await fetch(`${API_BASE}/faces/add`, {
-        method: 'POST',
-        body: formData
+    // Auto-explore state
+    let autoExplore = false;
+    let autoIndex = 0;
+    let autoMove = null;
+
+    // Focus/explore state
+    let isFocusing = false;
+    let focusTarget = null;
+    let focusDistance = 0;
+
+    // Epoch J2000 default (2000-01-01T12:00:00Z)
+    const J2000 = Date.parse('2000-01-01T12:00:00Z');
+
+    // caches
+    const loadedTextures = {};       // map ownerName -> THREE.Texture
+    const loadedImageURLs = {};      // map ownerName -> direct image URL (if available)
+
+    function init() {
+      if (!assetsLoaded) {
+        console.warn('Attempted to init before assets finished loading.');
+        return;
+      }
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x000000);
+      scene.add(solarSystem);
+
+      textureLoader = new THREE.TextureLoader();
+      try { textureLoader.setCrossOrigin(''); } catch (e) { /* ignore */ }
+
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
+      camera.position.set(0, 50, 120);
+
+      renderer = new THREE.WebGLRenderer({ antialias:true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+      raycaster = new THREE.Raycaster();
+      clock = new THREE.Clock();
+
+      createStarField();
+      createSolarSystem();
+      createRocketVisual();
+      setupInput();
+      window.addEventListener('resize', onResize, false);
+
+      document.getElementById('toggleAuto').addEventListener('click', function(){
+        if (!assetsLoaded) return;
+        autoExplore = !autoExplore;
+        this.textContent = 'Auto Explore: ' + (autoExplore ? 'ON' : 'OFF');
+        if (autoExplore) startAutoExplore();
+        else stopAutoExplore();
       });
 
-      const result = await response.json();
-      
-      if (result.success) {
-        setShowAddModal(false);
-        setAddPersonData({ name: '', id: '', age: '', state: '', department: '', occupation: '' });
-        setSuccess('Person added to database successfully!');
-        loadStats();
-      } else {
-        setError(result.error || 'Failed to add person');
+      document.getElementById('toggleMode').addEventListener('click', function(){
+        if (!assetsLoaded) return;
+        cursorMode = !cursorMode;
+        this.textContent = 'Cursor Mode: ' + (cursorMode ? 'ON' : 'OFF');
+        if (cursorMode && document.pointerLockElement === document.body) document.exitPointerLock();
+      });
+
+      document.getElementById('toggleLabels').addEventListener('click', function(){
+        labelsEnabled = !labelsEnabled;
+        this.textContent = 'Labels: ' + (labelsEnabled ? 'ON' : 'OFF');
+        labelSprites.forEach(function(s){ s.visible = labelsEnabled; });
+      });
+
+      document.getElementById('close-detail').addEventListener('click', function(){
+        document.getElementById('detail-panel').classList.add('hidden');
+      });
+
+      renderer.setAnimationLoop(loop);
+    }
+
+    function createStarField() {
+      const geom = new THREE.BufferGeometry();
+      const count = 8000;
+      const pos = new Float32Array(count * 3);
+      for (var i=0;i<count;i++){
+        pos[i*3+0] = (Math.random()-0.5)*8000;
+        pos[i*3+1] = (Math.random()-0.5)*8000;
+        pos[i*3+2] = (Math.random()-0.5)*8000;
       }
-      
-    } catch (err) {
-      setError(`Failed to add person: ${err.message}`);
-    } finally {
-      setLoading(false);
+      geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      const mat = new THREE.PointsMaterial({ color:0xffffff, size:2, sizeAttenuation:true });
+      const pts = new THREE.Points(geom, mat);
+      scene.add(pts);
     }
-  };
 
-  // Load stats
-  const loadStats = async () => {
-    try {
-      const response = await fetch(`${API_BASE}/stats`);
-      if (response.ok) {
-        const result = await response.json();
-        setStats(result.stats);
-      }
-    } catch (err) {
-      console.error('Failed to load stats:', err);
+    function computeVisualRadius(realKm) { return Math.max(0.08, realKm * VISUAL_RADIUS_SCALE); }
+    function computeVisualDistance(au) { return au * VISUAL_DISTANCE_SCALE; }
+
+    // create a procedural glow sprite (radial gradient) for the Sun
+    function createSunGlowSprite(scale) {
+      var size = 512;
+      var canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      var ctx = canvas.getContext('2d');
+      var g = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+      // toned down gradient stops — lighter, less flood
+      g.addColorStop(0.0, 'rgba(255,240,200,0.9)');
+      g.addColorStop(0.25, 'rgba(255,200,120,0.25)');
+      g.addColorStop(0.6, 'rgba(255,120,40,0.07)');
+      g.addColorStop(1.0, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0,0,size,size);
+      var tex = new THREE.CanvasTexture(canvas);
+      var mat = new THREE.SpriteMaterial({
+        map: tex,
+        blending: THREE.AdditiveBlending,
+        transparent:true,
+        depthWrite:false,
+        depthTest:true // let the sprite respect depth so it doesn't visually flood everything
+      });
+      // lower opacity and smaller scale so glow accents sun only
+      mat.opacity = 0.55;
+      var spr = new THREE.Sprite(mat);
+      // use slightly smaller multiplier so it doesn't dominate
+      spr.scale.set(scale * 0.75, scale * 0.75, 1);
+      spr.name = 'sunGlow';
+      spr.renderOrder = 10;
+      return spr;
     }
-  };
 
-  // Clear messages after 5 seconds
-  useEffect(() => {
-    if (error || success) {
-      const timer = setTimeout(() => {
-        setError('');
-        setSuccess('');
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [error, success]);
-
-  useEffect(() => {
-    loadStats();
-    return () => stopCamera();
-  }, []);
-
-  return (
-    <div style={{width:'100vw',height:'100vh',position:'relative'}}>
-      {/* Video container */}
-      <div id="video-container">
-        <video 
-          ref={videoRef} 
-          autoPlay 
-          playsInline 
-          muted 
-          style={{width:'100%',height:'100%',objectFit:'cover',transform:'scaleX(-1)'}}
-        />
-        <canvas ref={canvasRef} style={{display:'none'}} />
-      </div>
-
-      {/* Loading overlay */}
-      {loading && (
-        <div className="loading-overlay">
-          <div className="loading-spinner"></div>
-        </div>
-      )}
-
-      {/* Status bar */}
-      <div className="status">
-        <span className={`status-indicator ${streaming ? 'active' : 'inactive'}`}></span>
-        {streaming ? 'Camera Active' : 'Camera Stopped'} • 
-        Faces: {faces.length} • 
-        DB: {stats?.totalFaces || 0} people
-      </div>
-
-      {/* Main controls */}
-      <div className="controls">
-        {!streaming ? (
-          <button className="btn primary" onClick={startCamera}>
-            📹 Start Camera
-          </button>
-        ) : (
-          <button className="btn danger" onClick={stopCamera}>
-            ⏹️ Stop Camera
-          </button>
-        )}
-      </div>
-
-      {/* Search controls */}
-      {streaming && (
-        <div className="search-controls">
-          <button 
-            className="capture-btn"
-            onClick={captureAndSearch}
-            disabled={loading}
-          >
-            {loading ? '⏳' : '📸'}
-          </button>
-        </div>
-      )}
-
-      {/* Error/Success messages */}
-      {error && (
-        <div style={{position:'absolute',top:'80px',left:'16px',right:'16px',zIndex:10}}>
-          <div className="error-message">❌ {error}</div>
-        </div>
-      )}
-      
-      {success && (
-        <div style={{position:'absolute',top:'80px',left:'16px',right:'16px',zIndex:10}}>
-          <div className="success-message">✅ {success}</div>
-        </div>
-      )}
-
-      {/* Face cards */}
-      {faces.map(face => {
-        const person = face.person;
-        const cardClass = person.isMockData ? 'mock-data' : 
-                         person.isGoodMatch ? 'good-match' : 'weak-match';
-        
-        return (
-          <div 
-            key={face.id} 
-            className={`person-card ${cardClass}`}
-            style={{ 
-              left: face.x, 
-              top: Math.max(100, face.y - 50),
-              transform: 'translate(-50%, -100%)'
-            }}
-          >
-            {!person.isMockData && (
-              <div className="confidence-badge">
-                {Math.round(person.confidence)}%
-              </div>
-            )}
-            
-            <div className="person-header">
-              <div className="avatar">
-                {person.name.split(' ').map(n => n[0]).join('').substr(0,2)}
-              </div>
-              <div>
-                <div className="person-name">{person.name}</div>
-                <div className="person-id">{person.id}</div>
-              </div>
-            </div>
-
-            <div className="person-details">
-              {person.metadata?.age && (
-                <div className="detail-row">
-                  <span className="detail-label">Age:</span>
-                  <span>{person.metadata.age}</span>
-                </div>
-              )}
-              {person.metadata?.state && (
-                <div className="detail-row">
-                  <span className="detail-label">State:</span>
-                  <span>{person.metadata.state}</span>
-                </div>
-              )}
-              {person.metadata?.department && (
-                <div className="detail-row">
-                  <span className="detail-label">Department:</span>
-                  <span>{person.metadata.department}</span>
-                </div>
-              )}
-              {person.metadata?.occupation && (
-                <div className="detail-row">
-                  <span className="detail-label">Occupation:</span>
-                  <span>{person.metadata.occupation}</span>
-                </div>
-              )}
-            </div>
-
-            {person.isMockData && (
-              <>
-                <div className="mock-badge">MOCK DATA</div>
-                <button 
-                  className="add-person-btn"
-                  onClick={() => setShowAddModal(true)}
-                >
-                  ➕ Add to Database
-                </button>
-              </>
-            )}
-          </div>
+    // load texture using TextureLoader with graceful fallback to Image
+    function loadTextureDirect(url, onSuccess, onError) {
+      if (!url) { if (onError) onError(new Error('no-url')); return; }
+      try {
+        textureLoader.load(
+          url,
+          function(tex) { if (onSuccess) onSuccess(tex); },
+          undefined,
+          function(err) {
+            var img = new Image();
+            try { img.crossOrigin = 'anonymous'; } catch(e) {}
+            img.onload = function() {
+              try {
+                var tex2 = new THREE.Texture(img);
+                tex2.needsUpdate = true;
+                tex2.generateMipmaps = true;
+                tex2.minFilter = THREE.LinearMipMapLinearFilter;
+                tex2.magFilter = THREE.LinearFilter;
+                if (onSuccess) onSuccess(tex2);
+              } catch (ee) {
+                if (onError) onError(ee);
+              }
+            };
+            img.onerror = function(e) { if (onError) onError(e); };
+            img.src = url;
+          }
         );
-      })}
+      } catch (e) {
+        var img2 = new Image();
+        try { img2.crossOrigin = 'anonymous'; } catch(e) {}
+        img2.onload = function() {
+          var tex3 = new THREE.Texture(img2);
+          tex3.needsUpdate = true;
+          if (onSuccess) onSuccess(tex3);
+        };
+        img2.onerror = function(ev) { if (onError) onError(ev); };
+        img2.src = url;
+      }
+    }
 
-      {/* Add Person Modal */}
-      {showAddModal && (
-        <div className="modal active">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3>Add Person to Database</h3>
-              <button className="close" onClick={() => setShowAddModal(false)}>✕</button>
-            </div>
+    // apply a direct-loaded texture to a mesh and remember its URL
+    function applyTextureToMeshFromUrl(url, mesh, opts, ownerName) {
+      if (!url || !mesh) return;
+      loadTextureDirect(url, function(tex) {
+        try {
+          var key = ownerName || mesh.name || (mesh.parent ? mesh.parent.name : '');
+          loadedTextures[key] = tex;
+          loadedImageURLs[key] = url;
 
-            <div className="form-group">
-              <label className="form-label">Full Name *</label>
-              <input
-                type="text"
-                className="form-input"
-                value={addPersonData.name}
-                onChange={(e) => setAddPersonData({...addPersonData, name: e.target.value})}
-                placeholder="Enter full name"
-              />
-            </div>
+          if (mesh.name === 'Sun' || key === 'Sun') {
+            mesh.material = new THREE.MeshBasicMaterial({ map: tex });
+            mesh.material.needsUpdate = true;
+            var existing = mesh.getObjectByName('sunGlow');
+            if (existing) mesh.remove(existing);
+            var glowScale = computeVisualRadius(696342) * 6; // smaller than before
+            var glow = createSunGlowSprite(glowScale);
+            mesh.add(glow);
+          } else {
+            if (mesh.material) {
+              mesh.material.map = tex;
+              mesh.material.needsUpdate = true;
+            } else {
+              mesh.material = new THREE.MeshPhongMaterial({ map: tex });
+              mesh.material.needsUpdate = true;
+            }
+          }
 
-            <div className="form-group">
-              <label className="form-label">ID Number *</label>
-              <input
-                type="text"
-                className="form-input"
-                value={addPersonData.id}
-                onChange={(e) => setAddPersonData({...addPersonData, id: e.target.value})}
-                placeholder="NIN or ID number"
-              />
-            </div>
+          if (opts && opts.isRing) {
+            mesh.material.side = THREE.DoubleSide;
+            mesh.material.transparent = true;
+            mesh.material.opacity = 1.0;
+          }
+        } catch (err) {
+          console.warn('applyTextureToMesh error', mesh.name, err);
+        }
+      }, function(err) {
+        console.warn('texture load failed for', url, err);
+      });
+    }
 
-            <div className="form-grid">
-              <div className="form-group">
-                <label className="form-label">Age</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={addPersonData.age}
-                  onChange={(e) => setAddPersonData({...addPersonData, age: e.target.value})}
-                  placeholder="Age"
-                />
-              </div>
+    // computeCameraApproach now returns orbit settings too
+    function computeCameraApproach(planetMesh) {
+      var litPoint = computeLitPoint(planetMesh);
+      var planetPos = new THREE.Vector3();
+      planetMesh.getWorldPosition(planetPos);
+      var planetRadius = computeVisualRadius(planetMesh.userData.realRadiusKm);
+      // move closer — smaller multiplier so users can see surface detail
+      var distance = Math.max(planetRadius * 3, 6);
 
-              <div className="form-group">
-                <label className="form-label">State</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={addPersonData.state}
-                  onChange={(e) => setAddPersonData({...addPersonData, state: e.target.value})}
-                  placeholder="State"
-                />
-              </div>
-            </div>
+      var sun = findSun();
+      var sunPos = new THREE.Vector3(0,0,0);
+      if (sun) sun.getWorldPosition(sunPos);
+      var viewDir = litPoint.clone().sub(sunPos).normalize();
+      if (viewDir.length() === 0) viewDir.set(0, 0.5, 1).normalize();
 
-            <div className="form-group">
-              <label className="form-label">Department</label>
-              <input
-                type="text"
-                className="form-input"
-                value={addPersonData.department}
-                onChange={(e) => setAddPersonData({...addPersonData, department: e.target.value})}
-                placeholder="Police, DSS, Immigration, etc."
-              />
-            </div>
+      var camPos = litPoint.clone().add(viewDir.clone().multiplyScalar(distance));
+      camPos.y += Math.max(1, planetRadius * 0.45);
 
-            <div className="form-group">
-              <label className="form-label">Occupation</label>
-              <input
-                type="text"
-                className="form-input"
-                value={addPersonData.occupation}
-                onChange={(e) => setAddPersonData({...addPersonData, occupation: e.target.value})}
-                placeholder="Job title or occupation"
-              />
-            </div>
+      // orbit radius slightly larger than planet radius but less than approach distance
+      var orbitRadius = Math.max(planetRadius * 1.4, distance * 0.9);
+      var orbitElevation = Math.max(planetRadius * 0.35, 0.5);
 
-            {error && <div className="error-message">{error}</div>}
+      return {
+        camPos: camPos,
+        lookAt: litPoint,
+        holdDuration: 5000,
+        orbitRadius: orbitRadius,
+        orbitElevation: orbitElevation
+      };
+    }
 
-            <div style={{display:'flex',gap:'12px',marginTop:'20px'}}>
-              <button 
-                className="btn secondary" 
-                onClick={() => setShowAddModal(false)}
-                style={{flex:1}}
-              >
-                Cancel
-              </button>
-              <button 
-                className="btn primary"
-                onClick={addPersonToDatabase}
-                disabled={loading || !addPersonData.name || !addPersonData.id}
-                style={{flex:1}}
-              >
-                {loading ? 'Adding...' : 'Add Person'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+    function createSolarSystem() {
+      const sunLight = new THREE.PointLight(0xffffff, 3.2, 0, 2);
+      sunLight.position.set(0,0,0);
+      scene.add(sunLight);
+      scene.add(new THREE.AmbientLight(0x333333, 0.6));
 
-const root = createRoot(document.getElementById('root'));
-root.render(<App />);
-</script>
+      planDefs.forEach(function(def) {
+        var name = def[0];
+        var realRadius = def[1];
+        var distAU = def[2];
+        var period = def[3];
+        var type = def[4];
+        var texKey = def[5];
+
+        var scaledR = computeVisualRadius(realRadius);
+        var scaledDist = computeVisualDistance(distAU);
+
+        var geo = new THREE.SphereGeometry(scaledR, 64, 64);
+        var mat = new THREE.MeshPhongMaterial({ color: typeColor[type] !== undefined ? typeColor[type] : 0x888888, shininess: 10 });
+
+        var mesh = new THREE.Mesh(geo, mat);
+        mesh.name = name;
+        mesh.userData.realRadiusKm = realRadius;
+        mesh.userData.distanceAU = distAU;
+        mesh.userData.periodDays = period;
+        mesh.userData.type = type;
+        mesh.userData.isPlanet = true;
+
+        if (name === 'Sun') {
+          mesh.position.set(0,0,0);
+          solarSystem.add(mesh);
+          planetMeshes.push(mesh);
+          var url = (typeof txt !== 'undefined' && txt['Sun']) ? txt['Sun'] : null;
+          if (url) applyTextureToMeshFromUrl(url, mesh, { }, 'Sun');
+        } else {
+          var orbitGroup = new THREE.Group();
+          orbitGroup.userData.orbitRadius = scaledDist;
+          orbitGroup.userData.periodDays = period;
+          mesh.position.set(scaledDist, 0, 0);
+          orbitGroup.add(mesh);
+          solarSystem.add(orbitGroup);
+          orbitGroups.push(orbitGroup);
+
+          if (name === 'Saturn') {
+            var ringGeom = new THREE.RingGeometry(scaledR * 1.2, scaledR * 2.6, 128);
+            var ringMat = new THREE.MeshBasicMaterial({ color:0xffffff, side: THREE.DoubleSide, transparent:true, opacity:1.0 });
+            var ringMesh = new THREE.Mesh(ringGeom, ringMat);
+            ringMesh.rotation.x = -Math.PI/2;
+            ringMesh.name = 'SaturnRing';
+            ringMesh.renderOrder = 2;
+            mesh.add(ringMesh);
+            if (txt['SaturnRings']) applyTextureToMeshFromUrl(txt['SaturnRings'], ringMesh, { isRing:true }, 'Saturn');
+          }
+          if (name === 'Jupiter' || name === 'Uranus' || name === 'Neptune') {
+            var ringGeom2 = new THREE.RingGeometry(scaledR * 1.15, scaledR * 2.1, 64);
+            var ringMat2 = new THREE.MeshBasicMaterial({ color: 0xdddddd, side: THREE.DoubleSide, transparent:true, opacity:0.18 });
+            var ringMesh2 = new THREE.Mesh(ringGeom2, ringMat2);
+            ringMesh2.rotation.x = -Math.PI/2;
+            ringMesh2.name = name + 'Ring';
+            ringMesh2.renderOrder = 2;
+            mesh.add(ringMesh2);
+          }
+
+          var url = (typeof txt !== 'undefined' && txt[texKey]) ? txt[texKey] : null;
+          if (url) applyTextureToMeshFromUrl(url, mesh, { }, name);
+
+          planetMeshes.push(mesh);
+        }
+
+        createLabel(mesh);
+        createOrbitRing(scaledDist);
+      });
+    }
+
+    function createOrbitRing(radius) {
+      if (radius === 0) return;
+      var pts = [];
+      var seg = 256;
+      for (var i=0;i<=seg;i++){
+        var a = (i/seg) * Math.PI * 2;
+        pts.push(new THREE.Vector3(radius * Math.cos(a), 0, radius * Math.sin(a)));
+      }
+      var g = new THREE.BufferGeometry().setFromPoints(pts);
+      var m = new THREE.LineBasicMaterial({ color:0x333333, linewidth:1 });
+      var line = new THREE.Line(g, m);
+      line.rotation.x = Math.PI / 2;
+      solarSystem.add(line);
+    }
+
+    function createLabel(mesh) {
+      var canvas = document.createElement('canvas');
+      canvas.width = 256; canvas.height = 64;
+      var ctx = canvas.getContext('2d');
+      ctx.clearRect(0,0,256,64);
+      ctx.font = '24px Arial';
+      ctx.fillStyle = '#d1fae5';
+      ctx.textAlign = 'center';
+      ctx.fillText(mesh.name, 128, 40);
+      var tex = new THREE.CanvasTexture(canvas);
+      var mat = new THREE.SpriteMaterial({ map: tex, transparent:true, depthTest:false });
+      var spr = new THREE.Sprite(mat);
+      spr.scale.set(10,3,1);
+      spr.userData.for = mesh;
+      scene.add(spr);
+      labelSprites.push(spr);
+    }
+
+    function createRocketVisual() {
+      var cube = new THREE.BoxGeometry(1.4,1.4,1.4);
+      var mat = new THREE.MeshBasicMaterial({ color:0xff9933, transparent:true, opacity:0.45 });
+      var mesh = new THREE.Mesh(cube, mat);
+      mesh.name = 'smoke';
+      mesh.position.set(0,-5,5);
+      camera.add(mesh);
+    }
+
+    function setupInput() {
+      document.addEventListener('pointerlockchange', onPointerLockChange, false);
+      document.addEventListener('mousemove', onMouseMove, false);
+
+      document.body.addEventListener('click', function(e){
+        if (!assetsLoaded) {
+          statusEl.textContent = 'Still loading assets — please wait';
+          return;
+        }
+        if (!cursorMode) {
+          if (document.pointerLockElement !== document.body) document.body.requestPointerLock();
+        }
+      });
+
+      function cancelOnInput() {
+        if (autoExplore) {
+          autoExplore = false;
+          document.getElementById('toggleAuto').textContent = 'Auto Explore: OFF';
+          stopAutoExplore();
+        }
+      }
+
+      document.addEventListener('keydown', function(e){
+        cancelOnInput();
+        switch(e.code) {
+          case 'ArrowUp': case 'KeyW': moveForward=true; break;
+          case 'ArrowLeft': case 'KeyA': moveLeft=true; break;
+          case 'ArrowDown': case 'KeyS': moveBackward=true; break;
+          case 'ArrowRight': case 'KeyD': moveRight=true; break;
+        }
+      }, false);
+      document.addEventListener('keyup', function(e){
+        switch(e.code) {
+          case 'ArrowUp': case 'KeyW': moveForward=false; break;
+          case 'ArrowLeft': case 'KeyA': moveLeft=false; break;
+          case 'ArrowDown': case 'KeyS': moveBackward=false; break;
+          case 'ArrowRight': case 'KeyD': moveRight=false; break;
+        }
+      }, false);
+
+      renderer.domElement.addEventListener('click', function(ev){
+        cancelOnInput();
+        if (ev.target !== renderer.domElement) return;
+        if (isPointerLocked && !cursorMode) raycaster.setFromCamera({ x:0, y:0 }, camera);
+        else {
+          var x = (ev.clientX / window.innerWidth) * 2 - 1;
+          var y = -(ev.clientY / window.innerHeight) * 2 + 1;
+          raycaster.setFromCamera({ x:x, y:y }, camera);
+        }
+        var inter = raycaster.intersectObjects(solarSystem.children, true);
+        if (inter.length > 0) {
+          var top = inter[0].object;
+          // if they aimed at the sunGlow sprite, ignore selection
+          if (top && top.name === 'sunGlow') {
+            // intentionally ignore clicking the glow
+            return;
+          }
+          selectPlanet(inter[0].object);
+        } else document.getElementById('detail-panel').classList.add('hidden');
+      }, false);
+
+      document.addEventListener('mousemove', function(ev){
+        cancelOnInput();
+        mouse.x = (ev.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(ev.clientY / window.innerHeight) * 2 + 1;
+      }, false);
+
+      document.getElementById('focusBtn').addEventListener('click', function(){
+        if (!focusTarget) return;
+        isFocusing = !isFocusing;
+        this.textContent = isFocusing ? 'Unfocus' : 'Focus';
+        if (isFocusing) startFocus(focusTarget);
+        else stopFocus();
+      });
+    }
+
+    function onPointerLockChange() {
+      if (document.pointerLockElement === document.body) {
+        isPointerLocked = true;
+        document.body.classList.add('pointer-locked');
+        document.getElementById('instruction-panel').classList.add('hidden');
+      } else {
+        isPointerLocked = false;
+        document.body.classList.remove('pointer-locked');
+        document.getElementById('instruction-panel').classList.remove('hidden');
+      }
+    }
+
+    function onMouseMove(e) {
+      if (!isPointerLocked) return;
+      var mx = e.movementX || 0;
+      var my = e.movementY || 0;
+      rotationX -= mx * lookSensitivity;
+      rotationY -= my * lookSensitivity;
+      rotationY = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotationY));
+      camera.rotation.set(rotationY, rotationX, 0, 'YXZ');
+    }
+
+    // climb until we find a parent marked as planet
+    function climbToPlanet(mesh) {
+      var m = mesh;
+      while (m && (!m.userData || !m.userData.isPlanet)) {
+        m = m.parent;
+      }
+      return m;
+    }
+
+    function selectPlanet(obj) {
+      var mesh = climbToPlanet(obj);
+      if (!mesh) return;
+      showDetail(mesh);
+      focusTarget = mesh;
+      isFocusing = false;
+      document.getElementById('focusBtn').textContent = 'Focus';
+    }
+
+    function showDetail(mesh) {
+      // do not show details when the pointing target was the sunGlow earlier
+      // (hover logic prevents show for sunGlow)
+      var name = mesh.name;
+      var data = mesh.userData || {};
+      document.getElementById('planet-name').textContent = name.toUpperCase();
+      document.getElementById('planet-type').textContent = data.type || 'Unknown';
+      document.getElementById('planet-radius-real').textContent = (data.realRadiusKm || 0).toLocaleString();
+      document.getElementById('planet-radius-vis').textContent = computeVisualRadius(data.realRadiusKm).toFixed(3);
+
+      var imgEl = document.getElementById('planet-img');
+      try { imgEl.crossOrigin = 'anonymous'; } catch(e) {}
+      if (loadedImageURLs[name]) {
+        imgEl.src = loadedImageURLs[name];
+      } else {
+        var imgUrl = (typeof txt !== 'undefined' && txt[name]) ? txt[name] : '';
+        imgEl.src = imgUrl ? imgUrl : '';
+      }
+      document.getElementById('detail-panel').classList.remove('hidden');
+    }
+
+    function startFocus(mesh) {
+      var worldPos = new THREE.Vector3();
+      mesh.getWorldPosition(worldPos);
+      focusDistance = computeVisualRadius(mesh.userData.realRadiusKm) * 4 + 1.5;
+      camera.position.copy(worldPos.clone().add(new THREE.Vector3(focusDistance, focusDistance*0.3, 0)));
+      camera.lookAt(worldPos);
+    }
+    function stopFocus() {
+      camera.position.set(0,50,120);
+      camera.lookAt(new THREE.Vector3(0,0,0));
+      focusTarget = null;
+    }
+
+    // -------------------- Auto-explore (lit-point + orbit during hold) --------------------
+
+    function findSun() {
+      for (var i = 0; i < planetMeshes.length; i++) {
+        if (planetMeshes[i].name === 'Sun') return planetMeshes[i];
+      }
+      return null;
+    }
+
+    function computeLitPoint(planetMesh) {
+      var sun = findSun();
+      var sunPos = new THREE.Vector3(0,0,0);
+      if (sun) sun.getWorldPosition(sunPos);
+
+      var planetPos = new THREE.Vector3();
+      planetMesh.getWorldPosition(planetPos);
+
+      var dirToSun = sunPos.clone().sub(planetPos);
+      if (dirToSun.length() === 0) dirToSun.set(1,0,0);
+      dirToSun.normalize();
+
+      var r = computeVisualRadius(planetMesh.userData.realRadiusKm);
+      var lit = planetPos.clone().add(dirToSun.clone().multiplyScalar(r * 1.02));
+      return lit;
+    }
+
+    function easeInOutQuad(t) {
+      if (t < 0.5) return 2 * t * t;
+      return -1 + (4 - 2 * t) * t;
+    }
+
+    function scheduleNextAutoMove() {
+      if (!autoExplore) return;
+      var candidates = planetMeshes.slice(0);
+      if (candidates.length === 0) return;
+
+      autoIndex = autoIndex % candidates.length;
+      var target = candidates[autoIndex];
+      autoIndex += 1;
+
+      var approach = computeCameraApproach(target);
+      var fromPos = camera.position.clone();
+      var fromLookAt = camera.position.clone().add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(100));
+
+      var distBetween = fromPos.distanceTo(approach.camPos);
+      var base = 900;
+      var duration = Math.max(1200, Math.min(7000, base + distBetween * 60));
+
+      // add orbit params for hold-phase
+      var rotations = 1.0 + Math.random() * 0.6; // between 1.0 and 1.6 rotations
+      var orbitAngularVel = (rotations * 2 * Math.PI) / approach.holdDuration;
+
+      autoMove = {
+        phase: 'approach',
+        start: performance.now(),
+        duration: duration,
+        fromPos: fromPos,
+        toPos: approach.camPos,
+        fromLookAt: fromLookAt,
+        toLookAt: approach.lookAt,
+        holdStart: null,
+        holdDuration: approach.holdDuration,
+        owner: target,
+        orbitRadius: approach.orbitRadius,
+        orbitElevation: approach.orbitElevation,
+        orbitAngularVel: orbitAngularVel,
+        orbitStartAngle: Math.random() * Math.PI * 2
+      };
+    }
+
+    function updateAutoExplore(now) {
+      if (!autoExplore || !autoMove) return;
+
+      var elapsed = now - autoMove.start;
+      if (autoMove.phase === 'approach') {
+        var t = elapsed / autoMove.duration;
+        if (t >= 1) {
+          camera.position.copy(autoMove.toPos);
+          camera.lookAt(autoMove.toLookAt);
+          autoMove.phase = 'hold';
+          autoMove.holdStart = performance.now();
+          return;
+        }
+        var e = easeInOutQuad(t);
+        camera.position.lerpVectors(autoMove.fromPos, autoMove.toPos, e);
+        var look = new THREE.Vector3().lerpVectors(autoMove.fromLookAt, autoMove.toLookAt, e);
+        camera.lookAt(look);
+      } else if (autoMove.phase === 'hold') {
+        var owner = autoMove.owner;
+        if (!owner) { autoMove = null; scheduleNextAutoMove(); return; }
+        // orbiting around lit point
+        var lit = computeLitPoint(owner);
+        var holdElapsed = now - autoMove.holdStart;
+        var a = autoMove.orbitStartAngle + autoMove.orbitAngularVel * holdElapsed;
+        // compute orbital position (x,z) around lit
+        var ox = Math.cos(a) * autoMove.orbitRadius;
+        var oz = Math.sin(a) * autoMove.orbitRadius;
+        var oy = autoMove.orbitElevation;
+        camera.position.set(lit.x + ox, lit.y + oy, lit.z + oz);
+        camera.lookAt(lit);
+
+        if (holdElapsed >= autoMove.holdDuration) {
+          var leaveFrom = camera.position.clone();
+          var leaveTo = camera.position.clone().add(new THREE.Vector3(0, Math.max(1, computeVisualRadius(owner.userData.realRadiusKm)*0.6), -Math.max(2, computeVisualRadius(owner.userData.realRadiusKm)*1.5)));
+          autoMove = {
+            phase: 'leave',
+            start: performance.now(),
+            duration: 800,
+            fromPos: leaveFrom,
+            toPos: leaveTo,
+            fromLookAt: lit.clone(),
+            toLookAt: lit.clone()
+          };
+          setTimeout(function() {
+            if (autoExplore) scheduleNextAutoMove();
+          }, 850);
+        }
+      } else if (autoMove.phase === 'leave') {
+        var t2 = (now - autoMove.start) / autoMove.duration;
+        if (t2 >= 1) {
+          camera.position.copy(autoMove.toPos);
+          camera.lookAt(autoMove.toLookAt);
+          autoMove = null;
+          return;
+        }
+        var e2 = easeInOutQuad(t2);
+        camera.position.lerpVectors(autoMove.fromPos, autoMove.toPos, e2);
+        var look2 = new THREE.Vector3().lerpVectors(autoMove.fromLookAt, autoMove.toLookAt, e2);
+        camera.lookAt(look2);
+      }
+    }
+
+    // raycast and hover handling: always climb to planet owner; ignore sunGlow hits
+    function performHoverRaycast() {
+      if (cursorMode) raycaster.setFromCamera(mouse, camera);
+      else raycaster.setFromCamera({ x:0, y:0 }, camera);
+      var hits = raycaster.intersectObjects(solarSystem.children, true);
+      if (hits.length > 0) {
+        var top = hits[0].object;
+        // if top is the sun glow sprite, ignore hover entirely
+        if (top && top.name === 'sunGlow') {
+          // hide detail and return — do not treat glow as clickable geometry
+          if (lastHovered !== null) {
+            document.getElementById('detail-panel').classList.add('hidden');
+            planetMeshes.forEach(function(m){ if (m.material && m.material.emissive) m.material.emissive.setHex(0x000000); });
+            lastHovered = null;
+          }
+          return;
+        }
+        var owner = climbToPlanet(top);
+        if (!owner) return;
+        if (lastHovered === null || lastHovered !== owner) {
+          showDetail(owner);
+          lastHovered = owner;
+        }
+        // remove previous highlights
+        planetMeshes.forEach(function(m){
+          if (m.material && m.material.emissive) m.material.emissive.setHex(0x000000);
+        });
+        // highlight owner if possible, but do NOT emissive-highlight the Sun (prevents double-bright)
+        if (owner.name !== 'Sun' && owner.material && owner.material.emissive) {
+          owner.material.emissive.setHex(0x114422);
+        }
+      } else {
+        if (lastHovered !== null) {
+          document.getElementById('detail-panel').classList.add('hidden');
+          planetMeshes.forEach(function(m){ if (m.material && m.material.emissive) m.material.emissive.setHex(0x000000); });
+          lastHovered = null;
+        }
+      }
+    }
+
+    function loop() {
+      var delta = clock.getDelta();
+      var now = performance.now();
+      if (!paused) {
+        updateMovement(delta);
+        updateOrbits(delta);
+      }
+      updateSmoke();
+      updateLabels();
+      performHoverRaycast();
+      if (isFocusing && focusTarget) updateFocus(delta);
+      updateAutoExplore(now);
+      renderer.render(scene, camera);
+    }
+
+    function updateMovement(delta) {
+      if (moveForward) camera.translateZ(-playerSpeed * delta);
+      if (moveBackward) camera.translateZ(playerSpeed * delta);
+      if (moveLeft) camera.translateX(-playerSpeed * delta);
+      if (moveRight) camera.translateX(playerSpeed * delta);
+    }
+
+    function updateOrbits(delta) {
+      orbitGroups.forEach(function(group){
+        if (group.userData && group.userData.periodDays && group.userData.periodDays > 0) {
+          var periodDays = group.userData.periodDays;
+          var angVelReal = (2 * Math.PI) / (periodDays * SECONDS_PER_DAY);
+          var ang = angVelReal * delta * timeScale;
+          group.rotation.y += ang;
+        }
+      });
+      planetMeshes.forEach(function(p){
+        if (p.name !== 'Sun') p.rotation.y += 0.005;
+      });
+    }
+
+    function updateFocus(delta) {
+      if (!focusTarget) return;
+      var worldPos = new THREE.Vector3();
+      focusTarget.getWorldPosition(worldPos);
+      var t = clock.getElapsedTime();
+      var angle = t * 0.4;
+      var x = worldPos.x + Math.cos(angle) * focusDistance;
+      var z = worldPos.z + Math.sin(angle) * focusDistance;
+      var y = worldPos.y + focusDistance * 0.2;
+      camera.position.set(x, y, z);
+      camera.lookAt(worldPos);
+    }
+
+    function updateSmoke() {
+      var smoke = camera.getObjectByName('smoke');
+      if (smoke) {
+        var t = clock.getElapsedTime();
+        var s = 1 + Math.abs(Math.sin(t * 8)) * 0.7;
+        smoke.scale.set(s,s,s);
+        smoke.material.opacity = 0.4 + Math.abs(Math.sin(t * 4)) * 0.4;
+      }
+    }
+
+    function updateLabels() {
+      labelSprites.forEach(function(s){
+        var target = s.userData.for;
+        if (!target) return;
+        var pos = new THREE.Vector3();
+        target.getWorldPosition(pos);
+        s.position.copy(pos);
+        s.position.y += computeVisualRadius(target.userData.realRadiusKm) + 2.5;
+        s.visible = labelsEnabled;
+      });
+    }
+
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function startAutoExplore() { scheduleNextAutoMove(); }
+    function stopAutoExplore() { autoMove = null; }
+
+    // Start preload immediately when script runs
+    (async function bootstrap() {
+      try {
+        await preloadAllTextures();
+      } catch (err) {
+        console.error('Preload failed', err);
+      } finally {
+        try {
+          init();
+        } catch (e) {
+          console.error('Init failed', e);
+        }
+      }
+    })();
+
+  </script>
 </body>
 </html>
